@@ -46,6 +46,10 @@ func (p *Parser) matchTokenKind(kind TokenKind) bool {
 	return p.lastTokenKind() == kind ||
 		(kind == TokenKindIdent && p.lastTokenKind() == TokenKindKeyword)
 }
+func (p *Parser) matchVariable() bool {
+	return p.matchTokenKind(TokenKindIdent) && strings.HasPrefix(p.last().String, "$")
+
+}
 
 // expectTokenKind consumes the last token if it is the given kind.
 func (p *Parser) expectTokenKind(kind TokenKind) error {
@@ -298,7 +302,7 @@ func (p *Parser) parseLiteral(pos Pos) (Literal, error) {
 	}
 }
 
-func (p *Parser) ParseNestedIdentifier(pos Pos) (*NestedIdentifier, error) {
+func (p *Parser) ParseNestedIdentifier(_ Pos) (*NestedIdentifier, error) {
 	ident, err := p.parseIdent()
 	if err != nil {
 		return nil, err

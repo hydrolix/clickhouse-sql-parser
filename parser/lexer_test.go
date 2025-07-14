@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,6 +41,21 @@ func TestConsumeString(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, TokenKindString, lexer.lastToken.Kind)
 		require.Equal(t, strings.Trim(s, "'"), lexer.lastToken.String)
+		require.True(t, lexer.isEOF())
+	}
+}
+func TestConsumeTextBlock(t *testing.T) {
+	strs := []string{
+		"$$hello world$$",
+		"$$123$$",
+		"$$${variable:format} and 'string' $$",
+	}
+	for _, s := range strs {
+		lexer := NewLexer(s)
+		err := lexer.consumeToken()
+		require.NoError(t, err)
+		require.Equal(t, TokenKindString, lexer.lastToken.Kind)
+		require.Equal(t, s[2:len(s)-2], lexer.lastToken.String)
 		require.True(t, lexer.isEOF())
 	}
 }
@@ -99,7 +113,9 @@ func TestConsumeNumber(t *testing.T) {
 		for _, n := range invalidNumbers {
 			lexer := NewLexer(n)
 			err := lexer.consumeToken()
-			require.Error(t, err)
+			require.NoError(t, err)
+			require.NotEqual(t, lexer.lastToken.Kind, TokenKindInt)
+			require.NotEqual(t, lexer.lastToken.Kind, TokenKindFloat)
 		}
 	})
 
@@ -140,7 +156,9 @@ func TestConsumeNumber(t *testing.T) {
 		for _, f := range invalidFloats {
 			lexer := NewLexer(f)
 			err := lexer.consumeToken()
-			assert.Error(t, err)
+			require.NoError(t, err)
+			require.NotEqual(t, lexer.lastToken.Kind, TokenKindInt)
+			require.NotEqual(t, lexer.lastToken.Kind, TokenKindFloat)
 		}
 	})
 
@@ -162,6 +180,7 @@ func TestConsumeNumber(t *testing.T) {
 			"hello_123_world_456_789_abc_def_ghi_jkl",
 			"hello_123_world_456_789_abc_def_ghi_jkl_mno",
 			"hello_123_world_456_789_abc_def_ghi_jkl_mno_pqr",
+			"1hello_123_world_456_789_abc_def_ghi_jkl_mno_pqr",
 		}
 		for _, i := range idents {
 			lexer := NewLexer(i)

@@ -774,11 +774,32 @@ func (p *Parser) parseSubQuery(_ Pos) (*SubQuery, error) {
 		if err := p.expectTokenKind(TokenKindRParen); err != nil {
 			return nil, err
 		}
+		selectQuery.StatementEnd = p.Pos()
 	}
 
 	return &SubQuery{
 		HasParen: hasParen,
 		Select:   selectQuery,
+	}, nil
+}
+
+func (p *Parser) parseDescribeQuery(_ Pos) (*DescribeQuery, error) {
+	if !p.matchKeyword(KeywordDescribe) {
+		return nil, fmt.Errorf("expected DESCRIBE, got %s", p.lastTokenKind())
+	}
+	pos := p.Pos()
+	steStmt, err := p.parseJoinExpr(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	settings, err := p.tryParseSettingsClause(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	return &DescribeQuery{
+		DescribePos: pos,
+		Expr:        steStmt,
+		Settings:    settings,
 	}, nil
 }
 

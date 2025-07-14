@@ -7,6 +7,7 @@ import (
 
 const (
 	PrecedenceUnknown = iota
+	PrecedenceIndent
 	PrecedenceOr
 	PrecedenceAnd
 	PrecedenceQuery
@@ -35,6 +36,8 @@ func (p *Parser) getNextPrecedence() int {
 	switch {
 	case p.matchKeyword(KeywordOr):
 		return PrecedenceOr
+	case p.matchVariable():
+		return PrecedenceIndent
 	case p.matchKeyword(KeywordAnd):
 		return PrecedenceAnd
 	case p.matchKeyword(KeywordIs):
@@ -83,7 +86,7 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod),
 		p.matchKeyword(KeywordIn), p.matchKeyword(KeywordLike),
 		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
-		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ):
+		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ), p.matchVariable():
 		op := p.last().ToString()
 		_ = p.lexer.consumeToken()
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)
@@ -131,8 +134,8 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		return p.parseBetweenClause(expr)
 	case p.matchKeyword(KeywordGlobal):
 		_ = p.lexer.consumeToken()
-		if p.expectKeyword(KeywordIn) != nil {
-			return nil, fmt.Errorf("expected IN after GLOBAL, got %s", p.lastTokenKind())
+		if p.expectKeyword(KeywordIn) != nil && (p.expectKeyword(KeywordNot) != nil || p.expectKeyword(KeywordIn) != nil) {
+			return nil, fmt.Errorf("expected IN or NOT IN after GLOBAL, got %s", p.lastTokenKind())
 		}
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)
 		if err != nil {
@@ -366,8 +369,6 @@ func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 		return p.parseColumnCastExpr(pos)
 	case p.matchKeyword(KeywordCase):
 		return p.parseColumnCaseExpr(pos)
-	case p.matchKeyword(KeywordExtract):
-		return p.parseColumnExtractExpr(pos)
 	case p.matchTokenKind(TokenKindIdent):
 		return p.parseIdentOrFunction(pos)
 	case p.matchTokenKind(TokenKindString): // string literal
@@ -542,6 +543,41 @@ func (p *Parser) parseInterval(requireKeyword bool) (*IntervalExpr, error) {
 		Expr:        expr,
 		Unit:        unit,
 	}, nil
+}
+
+func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
+	// parse function name
+	if !p.matchKeyword(KeywordExcept) {
+		return nil, fmt.Errorf("expected EXCEPT clause but got %s", p.lastTokenKind())
+	}
+	name, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+	if p.matchTokenKind(TokenKindIdent) {
+		param, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		return &FunctionExpr{
+			Name: name,
+			Params: &ParamExprList{
+				Items: &ColumnExprList{
+					Items: []Expr{param},
+				},
+			},
+		}, nil
+	} else {
+		params, err := p.parseFunctionParams(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return &FunctionExpr{
+			Name:   name,
+			Params: params,
+		}, nil
+	}
+
 }
 
 func (p *Parser) parseFunctionExpr(_ Pos) (*FunctionExpr, error) {
@@ -732,7 +768,13 @@ func (p *Parser) parseSelectItem() (*SelectItem, error) {
 
 	modifiers := make([]*FunctionExpr, 0)
 	for {
-		if p.matchKeyword(KeywordExcept) || p.matchKeyword(KeywordApply) || p.matchKeyword(KeywordReplace) {
+		if p.matchKeyword(KeywordExcept) {
+			modifier, err := p.parseExceptExpr(p.Pos())
+			if err != nil {
+				return nil, err
+			}
+			modifiers = append(modifiers, modifier)
+		} else if p.matchKeyword(KeywordApply) || p.matchKeyword(KeywordReplace) {
 			modifier, err := p.parseFunctionExpr(p.Pos())
 			if err != nil {
 				return nil, err

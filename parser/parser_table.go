@@ -906,6 +906,12 @@ func (p *Parser) parseSettingsExprList(pos Pos) (*SettingExprList, error) {
 			return nil, err
 		}
 		expr = m
+	case p.matchVariable():
+		m, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		expr = m
 	default:
 		return nil, fmt.Errorf("unexpected token: %q, expected <number> or <string>", p.last().String)
 	}
@@ -1034,6 +1040,8 @@ func (p *Parser) parseStmt(pos Pos) (Expr, error) {
 		expr, err = p.parseDDL(pos)
 	case p.matchKeyword(KeywordSelect), p.matchKeyword(KeywordWith):
 		expr, err = p.parseSelectQuery(pos)
+	case p.matchKeyword(KeywordDescribe):
+		expr, err = p.parseDescribeQuery(pos)
 	case p.matchKeyword(KeywordDelete):
 		expr, err = p.parseDeleteClause(pos)
 	case p.matchKeyword(KeywordInsert):

@@ -188,11 +188,23 @@ func (l *Lexer) consumeIdent(_ Pos) error {
 
 	i := 0
 	if quoteType == Unquoted {
+		variable := false
 		if l.peekOk(i) && l.peekN(i) == '$' {
 			i++
+			if l.peekOk(i) && l.peekN(i) == '{' {
+				i++
+				variable = true
+			}
 		}
-		for l.peekOk(i) && IsIdentPart(l.peekN(i)) {
+		for l.peekOk(i) && (IsIdentPart(l.peekN(i)) || (variable && l.peekN(i) == ':')) {
 			i++
+		}
+		if variable {
+			if l.peekOk(i) && l.peekN(i) == '}' {
+				i++
+			} else {
+				return fmt.Errorf("unclosed variable: %s", l.slice(0, i))
+			}
 		}
 	} else {
 		for l.peekOk(i) && (quoteType == BackTicks && l.peekN(i) != '`' ||
@@ -246,21 +258,36 @@ func (l *Lexer) consumeMultiLineComment() {
 }
 
 func (l *Lexer) consumeString() error {
-	i := 1
-	endChar := byte('\'')
-	for l.peekOk(i) && l.peekN(i) != endChar {
+	start := 1
+	isTextBlock := false
+	if l.peekOk(0) && l.peekN(0) == '$' && l.peekOk(1) && l.peekN(1) == '$' {
+		start = 2
+		isTextBlock = true
+	}
+	i := start
+	for l.peekOk(i) {
+		if isTextBlock {
+			if l.peekN(i) == '$' && l.peekOk(i+1) && l.peekN(i+1) == '$' {
+				break
+			}
+		} else {
+			if l.peekN(i) == '\'' && l.peekOk(i-1) && l.peekN(i-1) != '\\' {
+				break
+			}
+		}
 		i++
 	}
 	if !l.peekOk(i) {
 		return errors.New("invalid string")
 	}
+
 	l.lastToken = &Token{
 		Kind:   TokenKindString,
-		String: l.slice(1, i),
-		Pos:    Pos(l.current + 1),
+		String: l.slice(start, i),
+		Pos:    Pos(l.current + start),
 		End:    Pos(l.current + i),
 	}
-	l.skipN(i + 1)
+	l.skipN(i + start)
 	return nil
 }
 
@@ -277,6 +304,9 @@ func (l *Lexer) skipComments() {
 				continue
 			}
 			return
+		case '#':
+			l.consumeSingleLineComment()
+			continue
 		case '/': // multi-line comment
 			if l.peekOk(1) && l.peekN(1) == '*' {
 				l.consumeMultiLineComment()
@@ -351,8 +381,20 @@ func (l *Lexer) consumeToken() error {
 			return nil
 		}
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		return l.consumeNumber()
-	case '`', '$', '"':
+		savedState := l.saveState()
+		if err := l.consumeNumber(); err != nil {
+			l.restoreState(savedState)
+			return l.consumeIdent(Pos(l.current))
+		} else {
+			return err
+		}
+	case '$':
+		if l.peekOk(1) && l.peekN(1) == '$' {
+			return l.consumeString()
+		} else {
+			return l.consumeIdent(Pos(l.current))
+		}
+	case '`', '"':
 		return l.consumeIdent(Pos(l.current))
 	case '\'':
 		return l.consumeString()

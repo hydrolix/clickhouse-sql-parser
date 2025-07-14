@@ -5455,6 +5455,40 @@ func (f *FromClause) Accept(visitor ASTVisitor) error {
 	return visitor.VisitFromExpr(f)
 }
 
+type DescribeQuery struct {
+	DescribePos Pos
+	Expr        Expr
+	Settings    *SettingsClause
+}
+
+func (f *DescribeQuery) Pos() Pos {
+	return f.DescribePos
+}
+
+func (f *DescribeQuery) End() Pos {
+	if f.Settings != nil {
+		return f.Settings.End()
+	} else {
+		return f.Expr.End()
+	}
+}
+
+func (f *DescribeQuery) String() string {
+	var builder strings.Builder
+	builder.WriteString("DESCRIBE ")
+	builder.WriteString(f.Expr.String())
+	return builder.String()
+}
+
+func (f *DescribeQuery) Accept(visitor ASTVisitor) error {
+	visitor.Enter(f)
+	defer visitor.Leave(f)
+	if err := f.Expr.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitDescribeQuery(f)
+}
+
 type IsNullExpr struct {
 	IsPos Pos
 	Expr  Expr
