@@ -29,7 +29,7 @@ log.Fatalf("parse error: %v", err)
 ```
 
 ## 📄 License
-Licensed under the Apache 2.0 License, same as the original project.
+Licensed under the MIT License, same as the original project.
 
 ## 🙏 Credits
 Originally created by AfterShip.
