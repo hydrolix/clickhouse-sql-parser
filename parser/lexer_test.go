@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -34,13 +35,19 @@ func TestConsumeString(t *testing.T) {
 	strs := []string{
 		"'hello world'",
 		"'123'",
+		"'hello \\'perfect\\' world'",
+		"'hello ''perfect'' world'",
+		"'hello \\'''perfect'' world'",
+		"'hello world'''",
+		"'hello world\\''''",
 	}
 	for _, s := range strs {
 		lexer := NewLexer(s)
 		err := lexer.consumeToken()
 		require.NoError(t, err)
 		require.Equal(t, TokenKindString, lexer.lastToken.Kind)
-		require.Equal(t, strings.Trim(s, "'"), lexer.lastToken.String)
+		fmt.Println(lexer.lastToken.String)
+		require.Equal(t, s[1:len(s)-1], lexer.lastToken.String)
 		require.True(t, lexer.isEOF())
 	}
 }

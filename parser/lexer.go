@@ -25,11 +25,12 @@ const (
 	TokenKindGE           TokenKind = ">="
 	TokenKindQuestionMark TokenKind = "?"
 
-	TokenKindPlus  TokenKind = "+"
-	TokenKindMinus TokenKind = "-"
-	TokenKindMul   TokenKind = "*"
-	TokenKindDiv   TokenKind = "/"
-	TokenKindMod   TokenKind = "%"
+	TokenKindPlus   TokenKind = "+"
+	TokenKindMinus  TokenKind = "-"
+	TokenKindMul    TokenKind = "*"
+	TokenKindDiv    TokenKind = "/"
+	TokenKindMod    TokenKind = "%"
+	TokenKindConcat TokenKind = "||"
 
 	TokenKindArrow TokenKind = "->"
 	TokenKindDash  TokenKind = "::"
@@ -271,8 +272,16 @@ func (l *Lexer) consumeString() error {
 				break
 			}
 		} else {
-			if l.peekN(i) == '\'' && l.peekOk(i-1) && l.peekN(i-1) != '\\' {
-				break
+			if l.peekN(i) == '\'' {
+				escapedBySlash := l.peekOk(i-1) && l.peekN(i-1) == '\\'
+				escapedByDoubling := l.peekOk(i+1) && l.peekN(i+1) == '\''
+				if !escapedBySlash && !escapedByDoubling {
+					break
+				}
+				if escapedByDoubling && !escapedBySlash {
+					i++
+				}
+
 			}
 		}
 		i++

@@ -192,6 +192,21 @@ func TestParser_With_SubSelect(t *testing.T) {
 	}
 }
 
+func TestParser_With_String_Concat_Operators(t *testing.T) {
+	validSQLs := []string{
+		"SELECT\n  'buc' + 'ket' \n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})",
+		"SELECT\n  'buc' || 'ket' \n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})",
+	}
+	for _, sql := range validSQLs {
+		println(sql)
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		marshal, err := json.Marshal(expr)
+		fmt.Printf("%s\n", marshal)
+		require.NoError(t, err)
+	}
+}
+
 func TestParser_Dashboard_Queries(t *testing.T) {
 	t.Skip() //skip test
 	fail := 0

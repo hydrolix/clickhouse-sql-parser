@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0
+
+- Support the single-quote escaping rule
+- Support string concatenate operator ||
+
 ## 0.1.1
 
 - **Fix**: Fix module name in go.mod

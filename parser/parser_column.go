@@ -83,7 +83,7 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		p.matchTokenKind(TokenKindGE), p.matchTokenKind(TokenKindGT),
 		p.matchTokenKind(TokenKindNE), p.matchTokenKind("<>"),
 		p.matchTokenKind(TokenKindMinus), p.matchTokenKind(TokenKindPlus), p.matchTokenKind(TokenKindMul),
-		p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod),
+		p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod), p.matchTokenKind(TokenKindConcat),
 		p.matchKeyword(KeywordIn), p.matchKeyword(KeywordLike),
 		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
 		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ), p.matchVariable():
