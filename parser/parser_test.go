@@ -203,6 +203,21 @@ func TestParser_With_String_Concat_Operators(t *testing.T) {
 		expr, err := parser.ParseStmts()
 		marshal, err := json.Marshal(expr)
 		fmt.Printf("%s\n", marshal)
+		require.NotNil(t, expr)
+		require.NoError(t, err)
+	}
+}
+
+func TestParser_With_REGEXP_Operators(t *testing.T) {
+	validSQLs := []string{
+		"SELECT toString(statusCode) as HTTP_Status_Code, $__timeInterval(reqTimeSec) as time, count(*) as http\nFROM ${table}\nWHERE $__timeFilter(${timestamp})\nAND $__adHocFilter()\nAND UA REGEXP '(AI2Bot|Amazon-Q-Bot|anthropic-ai|Applebot-Extended|Bytespider|ChatGPT-User|Claude(Bot|-Web)|cohere-ai|DatabricksBot|Google-CloudVertexBot|Google-Extended|GPTBot|Meta-ExternalAgent|meta-externalagent|MistralBot|OAI-SearchBot|PerplexityBot|Quora-Bot|SeekrBot|xAI-Bot|YandexTMCore|YouBot)'\nGROUP BY HTTP_Status_Code, time ORDER BY time\nSETTINGS hdx_query_max_execution_time=60, hdx_query_admin_comment='akamai - statuscode - ${__user.login}'",
+	}
+	for _, sql := range validSQLs {
+		println(sql)
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		marshal, err := json.Marshal(expr)
+		fmt.Printf("%s\n", marshal)
 		require.NoError(t, err)
 	}
 }
