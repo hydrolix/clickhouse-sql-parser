@@ -309,6 +309,9 @@ func (l *Lexer) skipComments() {
 				continue
 			}
 			return
+		case '#':
+			l.consumeSingleLineComment()
+			continue
 		case '/': // multi-line comment
 			if l.peekOk(1) && l.peekN(1) == '*' {
 				l.consumeMultiLineComment()
