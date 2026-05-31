@@ -7,6 +7,7 @@ import (
 
 const (
 	PrecedenceUnknown = iota
+	PrecedenceIndent
 	PrecedenceOr
 	PrecedenceAnd
 	PrecedenceQuery
@@ -36,6 +37,8 @@ func (p *Parser) getNextPrecedence() int {
 	switch {
 	case p.matchKeyword(KeywordOr):
 		return PrecedenceOr
+	case p.matchVariable():
+		return PrecedenceIndent
 	case p.matchKeyword(KeywordAnd):
 		return PrecedenceAnd
 	case p.matchKeyword(KeywordIs):
@@ -86,7 +89,8 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod), p.matchTokenKind(TokenKindConcat),
 		p.matchKeyword(KeywordIn), p.matchKeyword(KeywordLike),
 		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
-		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ):
+		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ),
+		p.matchVariable():
 		op := p.last().ToString()
 		_ = p.lexer.consumeToken()
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)

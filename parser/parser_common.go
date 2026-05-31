@@ -47,6 +47,10 @@ func (p *Parser) matchTokenKind(kind TokenKind) bool {
 		(kind == TokenKindIdent && p.lastTokenKind() == TokenKindKeyword)
 }
 
+func (p *Parser) matchVariable() bool {
+	return p.matchTokenKind(TokenKindIdent) && strings.HasPrefix(p.last().String, "$")
+}
+
 // expectTokenKind consumes the last token if it is the given kind.
 func (p *Parser) expectTokenKind(kind TokenKind) error {
 	if lastToken := p.tryConsumeTokenKind(kind); lastToken != nil {

@@ -1302,6 +1302,12 @@ func (p *Parser) parseSettingsExpr(pos Pos) (*SettingExpr, error) {
 			LiteralEnd: lastToken.End,
 			Literal:    lastToken.String,
 		}
+	case p.matchVariable():
+		m, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		expr = m
 	default:
 		return nil, fmt.Errorf("unexpected token: %q, expected <number>, <bool> or <string>", p.last().String)
 	}

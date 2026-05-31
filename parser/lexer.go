@@ -190,11 +190,23 @@ func (l *Lexer) consumeIdent(_ Pos) error {
 
 	i := 0
 	if quoteType == Unquoted {
+		variable := false
 		if l.peekOk(i) && l.peekN(i) == '$' {
 			i++
+			if l.peekOk(i) && l.peekN(i) == '{' {
+				i++
+				variable = true
+			}
 		}
-		for l.peekOk(i) && IsIdentPart(l.peekN(i)) {
+		for l.peekOk(i) && (IsIdentPart(l.peekN(i)) || (variable && l.peekN(i) == ':')) {
 			i++
+		}
+		if variable {
+			if l.peekOk(i) && l.peekN(i) == '}' {
+				i++
+			} else {
+				return fmt.Errorf("unclosed variable: %s", l.slice(0, i))
+			}
 		}
 	} else {
 		for l.peekOk(i) && (quoteType == BackTicks && l.peekN(i) != '`' ||
