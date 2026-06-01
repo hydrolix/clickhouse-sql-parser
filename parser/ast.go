@@ -6291,6 +6291,7 @@ type DescribeStmt struct {
 	StatementEnd Pos
 	DescribeType string // e.g., "TABLE", empty if not used
 	Target       *TableIdentifier
+	Settings     *SettingsClause
 }
 
 func (d *DescribeStmt) Pos() Pos {
@@ -6298,6 +6299,9 @@ func (d *DescribeStmt) Pos() Pos {
 }
 
 func (d *DescribeStmt) End() Pos {
+	if d.Settings != nil {
+		return d.Settings.End()
+	}
 	return d.Target.End()
 }
 
@@ -6306,6 +6310,11 @@ func (d *DescribeStmt) Accept(visitor ASTVisitor) error {
 	defer visitor.Leave(d)
 	if err := d.Target.Accept(visitor); err != nil {
 		return err
+	}
+	if d.Settings != nil {
+		if err := d.Settings.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitDescribeExpr(d)
 }

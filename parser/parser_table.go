@@ -1665,11 +1665,22 @@ func (p *Parser) parseDescribeStmt(pos Pos) (*DescribeStmt, error) {
 		return nil, err
 	}
 
+	settings, err := p.tryParseSettingsClause(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	statementEnd := tableIdent.End()
+	if settings != nil {
+		statementEnd = settings.End()
+	}
+
 	return &DescribeStmt{
 		DescribePos:  pos,
-		StatementEnd: tableIdent.End(),
+		StatementEnd: statementEnd,
 		DescribeType: describeType,
 		Target:       tableIdent,
+		Settings:     settings,
 	}, nil
 }
 

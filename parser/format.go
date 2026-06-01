@@ -1196,6 +1196,10 @@ func (d *DescribeStmt) FormatSQL(formatter *Formatter) {
 		formatter.WriteByte(whitespace)
 	}
 	formatter.WriteExpr(d.Target)
+	if d.Settings != nil {
+		formatter.Break()
+		formatter.WriteExpr(d.Settings)
+	}
 }
 
 func (d *DestinationClause) FormatSQL(formatter *Formatter) {
