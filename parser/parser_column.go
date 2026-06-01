@@ -138,8 +138,13 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		return p.parseBetweenClause(expr)
 	case p.matchKeyword(KeywordGlobal):
 		_ = p.lexer.consumeToken()
+		op := "GLOBAL IN"
+		if p.matchKeyword(KeywordNot) {
+			_ = p.lexer.consumeToken()
+			op = "GLOBAL NOT IN"
+		}
 		if p.expectKeyword(KeywordIn) != nil {
-			return nil, fmt.Errorf("expected IN after GLOBAL, got %s", p.lastTokenKind())
+			return nil, fmt.Errorf("expected IN or NOT IN after GLOBAL, got %s", p.lastTokenKind())
 		}
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)
 		if err != nil {
@@ -147,7 +152,7 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		}
 		return &BinaryOperation{
 			LeftExpr:  expr,
-			Operation: "GLOBAL IN",
+			Operation: TokenKind(op),
 			RightExpr: rightExpr,
 		}, nil
 	case p.matchTokenKind(TokenKindDot):
