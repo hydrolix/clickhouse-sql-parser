@@ -462,6 +462,7 @@ func TestParser_REGEXP_Bare(t *testing.T) {
 		"SELECT * FROM t WHERE x REGEXP 'foo'",
 		"SELECT * FROM t WHERE x REGEXP '(a|b)'",
 		"SELECT count() FROM t WHERE name REGEXP 'Bot' GROUP BY name",
+		"SELECT * FROM t WHERE x NOT REGEXP 'foo'",
 	}
 	for _, sql := range validSQLs {
 		_, err := NewParser(sql).ParseStmts()

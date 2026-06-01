@@ -67,7 +67,7 @@ func (p *Parser) getNextPrecedence() int {
 		return PrecedenceDoubleColon
 	case p.matchTokenKind(TokenKindDot):
 		return PrecedenceDot
-	case p.matchKeyword(KeywordBetween), p.matchKeyword(KeywordLike), p.matchKeyword(KeywordIlike):
+	case p.matchKeyword(KeywordBetween), p.matchKeyword(KeywordLike), p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordRegexp):
 		return PrecedenceBetweenLike
 	case p.matchKeyword(KeywordIn):
 		return precedenceIn
@@ -88,7 +88,8 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		p.matchTokenKind(TokenKindMinus), p.matchTokenKind(TokenKindPlus), p.matchTokenKind(TokenKindMul),
 		p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod), p.matchTokenKind(TokenKindConcat),
 		p.matchKeyword(KeywordIn), p.matchKeyword(KeywordLike),
-		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
+		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordRegexp),
+		p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
 		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ),
 		p.matchVariable():
 		op := p.last().ToString()
@@ -179,8 +180,9 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		case p.matchKeyword(KeywordIn):
 		case p.matchKeyword(KeywordLike):
 		case p.matchKeyword(KeywordIlike):
+		case p.matchKeyword(KeywordRegexp):
 		default:
-			return nil, fmt.Errorf("expected IN, LIKE or ILIKE after NOT, got %s", p.lastTokenKind())
+			return nil, fmt.Errorf("expected IN, LIKE, ILIKE or REGEXP after NOT, got %s", p.lastTokenKind())
 		}
 		if p.matchKeyword(KeywordBetween) {
 			return p.parseBetweenClause(expr)
