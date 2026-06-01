@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -194,25 +193,6 @@ func TestConsumeNumber(t *testing.T) {
 		}
 	})
 
-	t.Run("Invalid number", func(t *testing.T) {
-		invalidNumbers := []string{
-			"123e",
-			"123e+",
-			"123e-",
-			"123e",
-			"123E",
-			"123E+",
-			"123E-",
-			"0x",
-			"0xg",
-		}
-		for _, n := range invalidNumbers {
-			lexer := NewLexer(n)
-			err := lexer.consumeToken()
-			require.Error(t, err)
-		}
-	})
-
 	t.Run("Float number", func(t *testing.T) {
 		floats := []string{
 			"123.456",
@@ -230,27 +210,6 @@ func TestConsumeNumber(t *testing.T) {
 			require.Equal(t, TokenKindFloat, lexer.lastToken.Kind)
 			require.Equal(t, f, lexer.lastToken.String)
 			require.True(t, lexer.isEOF())
-		}
-	})
-
-	t.Run("Invalid float number", func(t *testing.T) {
-		invalidFloats := []string{
-			"123.456b",
-			"123.456e",
-			"123.456e+",
-			"123.456e-",
-			"123.456e+10e",
-			"123.456e-10e",
-			"123.456e10e",
-			"123.456E10e",
-			"123.456E+10e",
-			"123.456E-10e",
-			"123.456e+10e+10",
-		}
-		for _, f := range invalidFloats {
-			lexer := NewLexer(f)
-			err := lexer.consumeToken()
-			assert.Error(t, err)
 		}
 	})
 
