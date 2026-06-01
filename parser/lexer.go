@@ -260,39 +260,60 @@ func (l *Lexer) consumeMultiLineComment() {
 }
 
 func (l *Lexer) consumeString() error {
-	i := 1
-	endChar := byte('\'')
-	for l.peekOk(i) {
-		c := l.peekN(i)
-		// backslash escape
-		if c == '\\' {
-			i++
-			if l.peekOk(i) {
-				i++
+	start := 1
+	isTextBlock := false
+	if l.peekOk(0) && l.peekN(0) == '$' && l.peekOk(1) && l.peekN(1) == '$' {
+		start = 2
+		isTextBlock = true
+	}
+	i := start
+
+	if isTextBlock {
+		// Dollar-quoted text block: content is verbatim, terminator is the next `$$`.
+		for l.peekOk(i) {
+			if l.peekN(i) == '$' && l.peekOk(i+1) && l.peekN(i+1) == '$' {
+				break
 			}
-			continue
+			i++
 		}
-		// single quote
-		if c == endChar {
-			// double single quote ''
-			if l.peekOk(i+1) && l.peekN(i+1) == endChar {
-				i += 2
+		if !l.peekOk(i) {
+			return errors.New("invalid string")
+		}
+	} else {
+		endChar := byte('\'')
+		for l.peekOk(i) {
+			c := l.peekN(i)
+			// backslash escape
+			if c == '\\' {
+				i++
+				if l.peekOk(i) {
+					i++
+				}
 				continue
 			}
-			break
+			// single quote
+			if c == endChar {
+				// double single quote ''
+				if l.peekOk(i+1) && l.peekN(i+1) == endChar {
+					i += 2
+					continue
+				}
+				break
+			}
+			i++
 		}
-		i++
+		if !l.peekOk(i) || l.peekN(i) != endChar {
+			return errors.New("invalid string")
+		}
 	}
-	if !l.peekOk(i) || l.peekN(i) != endChar {
-		return errors.New("invalid string")
-	}
+
 	l.lastToken = &Token{
 		Kind:   TokenKindString,
-		String: l.slice(1, i),
-		Pos:    Pos(l.current + 1),
+		String: l.slice(start, i),
+		Pos:    Pos(l.current + start),
 		End:    Pos(l.current + i),
 	}
-	l.skipN(i + 1)
+	l.skipN(i + start)
 	return nil
 }
 
@@ -387,7 +408,12 @@ func (l *Lexer) consumeToken() error {
 		}
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		return l.consumeNumber()
-	case '`', '$', '"':
+	case '$':
+		if l.peekOk(1) && l.peekN(1) == '$' {
+			return l.consumeString()
+		}
+		return l.consumeIdent(Pos(l.current))
+	case '`', '"':
 		return l.consumeIdent(Pos(l.current))
 	case '\'':
 		return l.consumeString()
