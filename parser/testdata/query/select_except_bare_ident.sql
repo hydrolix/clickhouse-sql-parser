@@ -1,0 +1,1 @@
+SELECT * EXCEPT col FROM t

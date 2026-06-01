@@ -645,6 +645,38 @@ func (p *Parser) parseFunctionExpr(_ Pos) (*FunctionExpr, error) {
 	}, nil
 }
 
+func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
+	if !p.matchKeyword(KeywordExcept) {
+		return nil, fmt.Errorf("expected EXCEPT clause but got %s", p.lastTokenKind())
+	}
+	name, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+	if p.matchTokenKind(TokenKindIdent) {
+		param, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		return &FunctionExpr{
+			Name: name,
+			Params: &ParamExprList{
+				Items: &ColumnExprList{
+					Items: []Expr{param},
+				},
+			},
+		}, nil
+	}
+	params, err := p.parseFunctionParams(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	return &FunctionExpr{
+		Name:   name,
+		Params: params,
+	}, nil
+}
+
 func (p *Parser) parseColumnArgList(pos Pos) (*ColumnArgList, error) {
 	if err := p.expectTokenKind(TokenKindLParen); err != nil {
 		return nil, err
@@ -816,7 +848,13 @@ func (p *Parser) parseSelectItem() (*SelectItem, error) {
 
 	modifiers := make([]*FunctionExpr, 0)
 	for {
-		if p.matchKeyword(KeywordExcept) || p.matchKeyword(KeywordApply) || p.matchKeyword(KeywordReplace) {
+		if p.matchKeyword(KeywordExcept) {
+			modifier, err := p.parseExceptExpr(p.Pos())
+			if err != nil {
+				return nil, err
+			}
+			modifiers = append(modifiers, modifier)
+		} else if p.matchKeyword(KeywordApply) || p.matchKeyword(KeywordReplace) {
 			modifier, err := p.parseFunctionExpr(p.Pos())
 			if err != nil {
 				return nil, err
