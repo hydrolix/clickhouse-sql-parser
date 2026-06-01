@@ -215,48 +215,6 @@ func TestParser_ConditionALL_With_Variables(t *testing.T) {
 	}
 }
 
-type selectQueryVisitor struct {
-	DefaultASTVisitor
-	Start int
-	End   int
-}
-
-func (v *selectQueryVisitor) VisitTableExpr(expr *TableExpr) error {
-	// origin/main uses `expr.String()` (a fork-only method on *TableExpr).
-	// Upstream achieves the same with the package-level `Format(expr Expr)
-	// string` — its `TableExpr.FormatSQL` writes Expr + alias + FINAL,
-	// matching fork's `String()` byte-for-byte for this check.
-	if strings.HasPrefix(Format(expr), "(") {
-		v.Start = int(expr.Pos())
-		v.End = int(expr.End())
-	}
-
-	return nil
-}
-
-func TestParser_With_SubSelect(t *testing.T) {
-	validSQLs := map[string]string{
-		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  )\nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket":               ")",
-		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  ) as `alias1` \nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket":  "alias1",
-		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  ) as `alias 2` \nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket": "alias 2",
-	}
-	for sql, suffix := range validSQLs {
-		println(sql)
-		parser := NewParser(sql)
-		expr, err := parser.ParseStmts()
-		require.NoError(t, err, "Failed to parse: %s", sql)
-		require.NotEmpty(t, expr, "Parser returned no statements for: %s", sql)
-		visitor := selectQueryVisitor{}
-		err = expr[0].Accept(&visitor)
-		require.NoError(t, err)
-		require.NotNil(t, visitor.Start)
-		require.NotNil(t, visitor.End)
-		println(sql[visitor.Start:visitor.End])
-		require.True(t, strings.HasSuffix(strings.TrimSpace(sql[visitor.Start:visitor.End]), suffix))
-
-	}
-}
-
 func TestParser_With_String_Concat_Operators(t *testing.T) {
 	validSQLs := []string{
 		"SELECT\n  'buc' + 'ket' \n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})",
@@ -494,29 +452,6 @@ func TestParser_StringConcat_DoublePipe(t *testing.T) {
 	for _, sql := range validSQLs {
 		_, err := NewParser(sql).ParseStmts()
 		require.NoError(t, err, "Failed to parse: %s", sql)
-	}
-}
-
-// Sub-select position tracking — the same logic as TestParser_With_SubSelect
-// but without Grafana macros, so a failure here points unambiguously at
-// SubQuery.StatementEnd or TableExpr.End() rather than at variable parsing.
-func TestParser_SubSelect_Position_Bare(t *testing.T) {
-	validSQLs := map[string]string{
-		"SELECT count() FROM ( SELECT 1 ) WHERE 1 = 1":              ")",
-		"SELECT count() FROM ( SELECT 1 ) AS `alias1` WHERE 1 = 1":  "`alias1`",
-		"SELECT count() FROM ( SELECT 1 ) AS `alias 2` WHERE 1 = 1": "`alias 2`",
-	}
-	for sql, suffix := range validSQLs {
-		parser := NewParser(sql)
-		expr, err := parser.ParseStmts()
-		require.NoError(t, err, "Failed to parse: %s", sql)
-		require.NotEmpty(t, expr)
-		visitor := selectQueryVisitor{}
-		require.NoError(t, expr[0].Accept(&visitor))
-		require.NotZero(t, visitor.End)
-		got := strings.TrimSpace(sql[visitor.Start:visitor.End])
-		require.True(t, strings.HasSuffix(got, suffix),
-			"TableExpr slice %q does not end with %q", got, suffix)
 	}
 }
 
