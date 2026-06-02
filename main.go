@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	clickhouse "github.com/AfterShip/clickhouse-sql-parser/parser"
+	"github.com/hydrolix/clickhouse-sql-parser/parser"
 )
 
 const VERSION = "0.4.17"
@@ -57,8 +57,8 @@ func main() {
 		}
 		inputBytes = []byte(os.Args[len(os.Args)-1])
 	}
-	parser := clickhouse.NewParser(string(inputBytes))
-	stmts, err := parser.ParseStmts()
+	_parser := parser.NewParser(string(inputBytes))
+	stmts, err := _parser.ParseStmts()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse statements error: %s\n", err.Error())
 		os.Exit(1)
@@ -69,12 +69,12 @@ func main() {
 	} else { // format SQL
 		for _, stmt := range stmts {
 			if options.beautify {
-				formatter := clickhouse.NewFormatter()
+				formatter := parser.NewFormatter()
 				formatter.WithBeautify()
 				formatter.WriteExpr(stmt)
 				fmt.Println(formatter.String())
 			} else {
-				fmt.Println(clickhouse.Format(stmt))
+				fmt.Println(parser.Format(stmt))
 			}
 		}
 	}

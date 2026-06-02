@@ -81,7 +81,7 @@ func TestVisitor_SimpleRewrite(t *testing.T) {
 
 	newSql := Format(stmt)
 
-	require.NotSame(t, sql, newSql)
+	require.NotEqual(t, sql, newSql)
 	require.True(t, strings.Contains(newSql, "hack"))
 	require.True(t, strings.Contains(newSql, string(OrderDirectionDesc)))
 }
@@ -115,7 +115,7 @@ func TestVisitor_NestRewrite(t *testing.T) {
 
 	newSql := Format(stmt)
 
-	require.NotSame(t, sql, newSql)
+	require.NotEqual(t, sql, newSql)
 	// Both table names should be rewritten (they might both be table1 since they're at the same depth)
 	require.True(t, strings.Contains(newSql, "table1") || strings.Contains(newSql, "table2"))
 }
