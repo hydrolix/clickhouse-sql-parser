@@ -48,7 +48,7 @@ func (p *Parser) matchTokenKind(kind TokenKind) bool {
 }
 
 func (p *Parser) matchVariable() bool {
-	return p.matchTokenKind(TokenKindIdent) && strings.HasPrefix(p.last().String, "$")
+	return p.matchTokenKind(TokenKindIdent) && p.last().QuoteType != BackTicks && strings.HasPrefix(p.last().String, "$")
 }
 
 // expectTokenKind consumes the last token if it is the given kind.

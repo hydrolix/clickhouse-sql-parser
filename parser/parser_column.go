@@ -7,7 +7,7 @@ import (
 
 const (
 	PrecedenceUnknown = iota
-	PrecedenceIndent
+	PrecedenceIdent
 	PrecedenceOr
 	PrecedenceAnd
 	PrecedenceQuery
@@ -38,7 +38,7 @@ func (p *Parser) getNextPrecedence() int {
 	case p.matchKeyword(KeywordOr):
 		return PrecedenceOr
 	case p.matchVariable():
-		return PrecedenceIndent
+		return PrecedenceIdent
 	case p.matchKeyword(KeywordAnd):
 		return PrecedenceAnd
 	case p.matchKeyword(KeywordIs):

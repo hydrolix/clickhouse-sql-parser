@@ -528,3 +528,73 @@ func TestParser_Describe_RejectsJoin(t *testing.T) {
 		require.Error(t, err, "Expected DESCRIBE-with-JOIN to fail: %s", sql)
 	}
 }
+
+// Regression guard for matchVariable(): a backtick-quoted identifier whose
+// body starts with `$` (e.g. `` `$col` ``) must be treated as an ordinary
+// identifier, not as a Grafana template variable. Before the QuoteType
+// guard was added to matchVariable, the lexer-stripped String field made
+// `` `$col` `` look like a `$`-prefixed variable, which threw it onto the
+// infix-operator branch in parseInfix.
+func TestParser_Var_BacktickQuotedIdent_IsNotVariable(t *testing.T) {
+	stmts, err := NewParser("SELECT `$col` FROM t").ParseStmts()
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+
+	sel, ok := stmts[0].(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+	require.Len(t, sel.SelectItems, 1)
+
+	ident, ok := sel.SelectItems[0].Expr.(*Ident)
+	require.True(t, ok, "expected projected expression to be *Ident, got %T (matchVariable misclassified the backtick-quoted ident as a variable)", sel.SelectItems[0].Expr)
+	require.Equal(t, "$col", ident.Name)
+	require.Equal(t, BackTicks, ident.QuoteType)
+}
+
+// Companion test: a backtick-quoted `$`-prefixed ident on the left side of a
+// comparison must be the LeftExpr of a BinaryOperation, not consumed as the
+// binary operator itself. Pre-fix, getNextPrecedence returned PrecedenceIdent
+// for `` `$col` `` and parseInfix swallowed it as the operator token,
+// producing a malformed AST.
+func TestParser_Var_BacktickQuotedIdent_InComparison(t *testing.T) {
+	stmts, err := NewParser("SELECT 1 FROM t WHERE `$col` = 1").ParseStmts()
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+
+	sel, ok := stmts[0].(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+	require.NotNil(t, sel.Where)
+
+	bin, ok := sel.Where.Expr.(*BinaryOperation)
+	require.True(t, ok, "expected WHERE to be *BinaryOperation, got %T", sel.Where.Expr)
+	require.Equal(t, TokenKind("="), bin.Operation)
+
+	left, ok := bin.LeftExpr.(*Ident)
+	require.True(t, ok, "expected LeftExpr to be *Ident, got %T", bin.LeftExpr)
+	require.Equal(t, "$col", left.Name)
+	require.Equal(t, BackTicks, left.QuoteType)
+}
+
+// Direct-unit coverage for matchVariable() across the five quoting modes
+// that flow through the lexer. We drive each token manually so the check
+// is isolated from any downstream parser branch.
+func TestMatchVariable_QuotingMatrix(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+		want bool
+	}{
+		{"bare $ident", "$col", true},
+		{"braced ${tbl}", "${tbl}", true},
+		{"plain ident", "col", false},
+		{"backtick `$col`", "`$col`", false},
+		{"double-quoted \"$col\"", `"$col"`, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewParser(tc.sql)
+			// Prime the lexer so p.last() points at the first token.
+			require.NoError(t, p.lexer.consumeToken())
+			require.Equal(t, tc.want, p.matchVariable(), "matchVariable() mismatch for %q", tc.sql)
+		})
+	}
+}
