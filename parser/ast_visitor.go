@@ -156,6 +156,7 @@ type ASTVisitor interface {
 	VisitWindowFrameNumber(expr *WindowFrameNumber) error
 	VisitWindowFrameParam(expr *WindowFrameParam) error
 	VisitSelectQuery(expr *SelectQuery) error
+	VisitDescribeQuery(expr *DescribeQuery) error
 	VisitSubQueryExpr(expr *SubQuery) error
 	VisitNotExpr(expr *NotExpr) error
 	VisitNegateExpr(expr *NegateExpr) error
@@ -1153,6 +1154,13 @@ func (v *DefaultASTVisitor) VisitJoinConstraintExpr(expr *JoinConstraintClause) 
 }
 
 func (v *DefaultASTVisitor) VisitFromExpr(expr *FromClause) error {
+	if v.Visit != nil {
+		return v.Visit(expr)
+	}
+	return nil
+}
+
+func (v *DefaultASTVisitor) VisitDescribeQuery(expr *DescribeQuery) error {
 	if v.Visit != nil {
 		return v.Visit(expr)
 	}

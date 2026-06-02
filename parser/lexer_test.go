@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -231,6 +232,7 @@ func TestConsumeNumber(t *testing.T) {
 			"hello_123_world_456_789_abc_def_ghi_jkl",
 			"hello_123_world_456_789_abc_def_ghi_jkl_mno",
 			"hello_123_world_456_789_abc_def_ghi_jkl_mno_pqr",
+			"1hello_123_world_456_789_abc_def_ghi_jkl_mno_pqr",
 		}
 		for _, i := range idents {
 			lexer := NewLexer(i)

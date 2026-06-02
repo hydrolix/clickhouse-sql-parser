@@ -628,6 +628,41 @@ func (p *Parser) parseInterval(requireKeyword bool) (*IntervalExpr, error) {
 	}, nil
 }
 
+func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
+	// parse function name
+	if !p.matchKeyword(KeywordExcept) {
+		return nil, fmt.Errorf("expected EXCEPT clause but got %s", p.lastTokenKind())
+	}
+	name, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+	if p.matchTokenKind(TokenKindIdent) {
+		param, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		return &FunctionExpr{
+			Name: name,
+			Params: &ParamExprList{
+				Items: &ColumnExprList{
+					Items: []Expr{param},
+				},
+			},
+		}, nil
+	} else {
+		params, err := p.parseFunctionParams(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return &FunctionExpr{
+			Name:   name,
+			Params: params,
+		}, nil
+	}
+
+}
+
 func (p *Parser) parseFunctionExpr(_ Pos) (*FunctionExpr, error) {
 	// parse function name
 	name, err := p.parseIdent()

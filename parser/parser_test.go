@@ -598,3 +598,116 @@ func TestMatchVariable_QuotingMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestParser_ConditionALL_With_Variables(t *testing.T) {
+	validSQLs := []string{
+		//"SELECT 1 FROM table WHERE statusCode ${a} (1,2)",
+		//"SELECT toString(statusCode) as HTTP_Status_Code, $__timeInterval(${timefilter}) as time, ${count} as http FROM ${table} WHERE $__timeFilter(${timefilter}) AND $__conditionalAll( statusCode IN (${statusCode:sqlstring}), $statusCode)",
+		"SELECT toString(statusCode) as HTTP_Status_Code, $__timeInterval(${timefilter}) as time, ${count} as http FROM ${table} WHERE $__timeFilter(${timefilter}) AND $__conditionalAll( statusCode ${AND_statusCode} (${statusCode:sqlstring}), $statusCode)",
+	}
+	for _, sql := range validSQLs {
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		marshal, err := json.Marshal(expr)
+		fmt.Printf("%s", marshal)
+		require.NoError(t, err)
+	}
+}
+
+type selectQueryVisitor struct {
+	DefaultASTVisitor
+	Start int
+	End   int
+}
+
+func (v *selectQueryVisitor) VisitTableExpr(expr *TableExpr) error {
+	if strings.HasPrefix(expr.String(), "(") {
+		v.Start = int(expr.Pos())
+		v.End = int(expr.End())
+	}
+
+	return nil
+}
+
+func TestParser_With_SubSelect(t *testing.T) {
+	validSQLs := map[string]string{
+		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  )\nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket":               ")",
+		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  ) as `alias1` \nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket":  "alias1",
+		"SELECT\n  bucket,\n  count()\nFROM\n  (\n    SELECT\n      toStartOfInterval(${timestamp}, INTERVAL 1 hour) AS bucket\n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})\n      AND $__adHocFilter()\n  ) as `alias 2` \nWHERE\n  $__adHocFilter()\nGROUP BY\n  bucket": "alias 2",
+	}
+	for sql, suffix := range validSQLs {
+		println(sql)
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		visitor := selectQueryVisitor{}
+		err = expr[0].Accept(&visitor)
+		require.NoError(t, err)
+		require.NotNil(t, visitor.Start)
+		require.NotNil(t, visitor.End)
+		println(sql[visitor.Start:visitor.End])
+		require.True(t, strings.HasSuffix(strings.TrimSpace(sql[visitor.Start:visitor.End]), suffix))
+
+	}
+}
+
+func TestParser_With_String_Concat_Operators(t *testing.T) {
+	validSQLs := []string{
+		"SELECT\n  'buc' + 'ket' \n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})",
+		"SELECT\n  'buc' || 'ket' \n    FROM\n      ${table}\n    WHERE\n      $__timeFilter(${timestamp})",
+	}
+	for _, sql := range validSQLs {
+		println(sql)
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		marshal, err := json.Marshal(expr)
+		fmt.Printf("%s\n", marshal)
+		require.NotNil(t, expr)
+		require.NoError(t, err)
+	}
+}
+
+func TestParser_With_REGEXP_Operators(t *testing.T) {
+	validSQLs := []string{
+		"SELECT toString(statusCode) as HTTP_Status_Code, $__timeInterval(reqTimeSec) as time, count(*) as http\nFROM ${table}\nWHERE $__timeFilter(${timestamp})\nAND $__adHocFilter()\nAND UA REGEXP '(AI2Bot|Amazon-Q-Bot|anthropic-ai|Applebot-Extended|Bytespider|ChatGPT-User|Claude(Bot|-Web)|cohere-ai|DatabricksBot|Google-CloudVertexBot|Google-Extended|GPTBot|Meta-ExternalAgent|meta-externalagent|MistralBot|OAI-SearchBot|PerplexityBot|Quora-Bot|SeekrBot|xAI-Bot|YandexTMCore|YouBot)'\nGROUP BY HTTP_Status_Code, time ORDER BY time\nSETTINGS hdx_query_max_execution_time=60, hdx_query_admin_comment='akamai - statuscode - ${__user.login}'",
+	}
+	for _, sql := range validSQLs {
+		println(sql)
+		parser := NewParser(sql)
+		expr, err := parser.ParseStmts()
+		marshal, err := json.Marshal(expr)
+		fmt.Printf("%s\n", marshal)
+		require.NoError(t, err)
+	}
+}
+
+func TestParser_Dashboard_Queries(t *testing.T) {
+	t.Skip() //skip test
+	fail := 0
+	success := 0
+	err := filepath.WalkDir("path to folder with sql files", func(path string, d fs.DirEntry, e error) error {
+		if e != nil {
+			t.Fail()
+		}
+
+		if strings.HasSuffix(path, ".sql") {
+			t.Run(path, func(t *testing.T) {
+				content, err := os.ReadFile(path)
+				require.NoError(t, err)
+				parser := NewParser(string(content))
+				println(string(content))
+				_, err = parser.ParseStmts()
+				if err != nil {
+					fail++
+				} else {
+					success++
+				}
+				require.NoError(t, err)
+
+			})
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	println("success", success)
+	println("fail", fail)
+}
