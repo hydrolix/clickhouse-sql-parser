@@ -88,9 +88,12 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 26,
@@ -153,9 +156,12 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 78,
@@ -203,9 +209,12 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 116,
@@ -263,9 +272,12 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 159,
@@ -329,9 +341,12 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 207,
@@ -401,8 +416,11 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]

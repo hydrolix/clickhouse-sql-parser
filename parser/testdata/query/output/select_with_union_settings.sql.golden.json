@@ -1,0 +1,127 @@
+[
+  {
+    "SelectPos": 0,
+    "StatementEnd": 38,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 7,
+          "NumEnd": 8,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": {
+          "Name": "v",
+          "QuoteType": 1,
+          "NamePos": 12,
+          "NameEnd": 13
+        }
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": {
+      "SettingsPos": 14,
+      "ListEnd": 38,
+      "Items": [
+        {
+          "SettingsPos": 23,
+          "Name": {
+            "Name": "max_threads",
+            "QuoteType": 1,
+            "NamePos": 23,
+            "NameEnd": 34
+          },
+          "Expr": {
+            "NumPos": 37,
+            "NumEnd": 38,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "Format": null,
+    "Union": {
+      "SelectPos": 45,
+      "StatementEnd": 83,
+      "With": null,
+      "Top": null,
+      "HasDistinct": false,
+      "DistinctOn": null,
+      "SelectItems": [
+        {
+          "Expr": {
+            "NumPos": 52,
+            "NumEnd": 53,
+            "Literal": "2",
+            "Base": 10
+          },
+          "Modifiers": [],
+          "Alias": {
+            "Name": "v",
+            "QuoteType": 1,
+            "NamePos": 57,
+            "NameEnd": 58
+          }
+        }
+      ],
+      "From": null,
+      "Window": null,
+      "Prewhere": null,
+      "Where": null,
+      "GroupBy": null,
+      "WithTotal": false,
+      "Having": null,
+      "OrderBy": null,
+      "LimitBy": null,
+      "Limit": null,
+      "Settings": {
+        "SettingsPos": 59,
+        "ListEnd": 83,
+        "Items": [
+          {
+            "SettingsPos": 68,
+            "Name": {
+              "Name": "max_threads",
+              "QuoteType": 1,
+              "NamePos": 68,
+              "NameEnd": 79
+            },
+            "Expr": {
+              "NumPos": 82,
+              "NumEnd": 83,
+              "Literal": "2",
+              "Base": 10
+            }
+          }
+        ]
+      },
+      "Format": null,
+      "Union": null,
+      "UnionMode": "",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
+    },
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  }
+]

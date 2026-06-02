@@ -84,9 +84,12 @@
       ]
     },
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 90,
@@ -173,9 +176,12 @@
       ]
     },
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 186,
@@ -262,9 +268,12 @@
       ]
     },
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 282,
@@ -359,9 +368,12 @@
         "NameEnd": 415
       }
     },
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   },
   {
     "SelectPos": 418,
@@ -481,9 +493,12 @@
                   },
                   "Settings": null,
                   "Format": null,
-                  "UnionAll": null,
-                  "UnionDistinct": null,
-                  "Except": null
+                  "Union": null,
+                  "UnionMode": "",
+                  "Except": null,
+                  "ExceptMode": "",
+                  "Intersect": null,
+                  "IntersectMode": ""
                 }
               },
               "AliasPos": 487,
@@ -573,9 +588,12 @@
                     "Limit": null,
                     "Settings": null,
                     "Format": null,
-                    "UnionAll": null,
-                    "UnionDistinct": null,
-                    "Except": null
+                    "Union": null,
+                    "UnionMode": "",
+                    "Except": null,
+                    "ExceptMode": "",
+                    "Intersect": null,
+                    "IntersectMode": ""
                   }
                 },
                 "AliasPos": 530,
@@ -708,8 +726,11 @@
       ]
     },
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]

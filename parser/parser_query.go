@@ -974,6 +974,17 @@ func (p *Parser) parseSubQuery(_ Pos) (*SubQuery, error) {
 	}, nil
 }
 
+func (p *Parser) consumeOptionalSetOpModifier() string {
+	switch {
+	case p.tryConsumeKeywords(KeywordAll):
+		return "ALL"
+	case p.tryConsumeKeywords(KeywordDistinct):
+		return "DISTINCT"
+	default:
+		return ""
+	}
+}
+
 func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 	if !p.matchKeyword(KeywordSelect) && !p.matchKeyword(KeywordWith) && !p.matchTokenKind(TokenKindLParen) {
 		return nil, fmt.Errorf("expected SELECT, WITH or (, got %s", p.lastTokenKind())
@@ -986,28 +997,29 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 	}
 	switch {
 	case p.tryConsumeKeywords(KeywordUnion):
-		switch {
-		case p.tryConsumeKeywords(KeywordAll):
-			unionAllExpr, err := p.parseSelectQuery(p.Pos())
-			if err != nil {
-				return nil, err
-			}
-			selectStmt.UnionAll = unionAllExpr
-		case p.tryConsumeKeywords(KeywordDistinct):
-			unionDistinctExpr, err := p.parseSelectQuery(p.Pos())
-			if err != nil {
-				return nil, err
-			}
-			selectStmt.UnionDistinct = unionDistinctExpr
-		default:
-			return nil, fmt.Errorf("expected ALL or DISTINCT, got %s", p.lastTokenKind())
-		}
-	case p.tryConsumeKeywords(KeywordExcept):
-		exceptExpr, err := p.parseSelectQuery(p.Pos())
+		mode := UnionMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
 		if err != nil {
 			return nil, err
 		}
-		selectStmt.Except = exceptExpr
+		selectStmt.Union = next
+		selectStmt.UnionMode = mode
+	case p.tryConsumeKeywords(KeywordExcept):
+		mode := ExceptMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		selectStmt.Except = next
+		selectStmt.ExceptMode = mode
+	case p.tryConsumeKeywords(KeywordIntersect):
+		mode := IntersectMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		selectStmt.Intersect = next
+		selectStmt.IntersectMode = mode
 	}
 	if hasParen {
 		if err := p.expectTokenKind(TokenKindRParen); err != nil {

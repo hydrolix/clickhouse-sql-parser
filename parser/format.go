@@ -2339,21 +2339,42 @@ func (s *SelectQuery) FormatSQL(formatter *Formatter) {
 		formatter.Break()
 		formatter.WriteExpr(s.Format)
 	}
-	if s.UnionAll != nil {
+	if s.Union != nil {
 		formatter.Break()
-		formatter.WriteString("UNION ALL")
+		switch s.UnionMode { //nolint:exhaustive
+		case UnionModeAll:
+			formatter.WriteString("UNION ALL")
+		case UnionModeDistinct:
+			formatter.WriteString("UNION DISTINCT")
+		default:
+			formatter.WriteString("UNION")
+		}
 		formatter.Break()
-		formatter.WriteExpr(s.UnionAll)
-	} else if s.UnionDistinct != nil {
-		formatter.Break()
-		formatter.WriteString("UNION DISTINCT")
-		formatter.Break()
-		formatter.WriteExpr(s.UnionDistinct)
+		formatter.WriteExpr(s.Union)
 	} else if s.Except != nil {
 		formatter.Break()
-		formatter.WriteString("EXCEPT")
+		switch s.ExceptMode { //nolint:exhaustive
+		case ExceptModeAll:
+			formatter.WriteString("EXCEPT ALL")
+		case ExceptModeDistinct:
+			formatter.WriteString("EXCEPT DISTINCT")
+		default:
+			formatter.WriteString("EXCEPT")
+		}
 		formatter.Break()
 		formatter.WriteExpr(s.Except)
+	} else if s.Intersect != nil {
+		formatter.Break()
+		switch s.IntersectMode { //nolint:exhaustive
+		case IntersectModeAll:
+			formatter.WriteString("INTERSECT ALL")
+		case IntersectModeDistinct:
+			formatter.WriteString("INTERSECT DISTINCT")
+		default:
+			formatter.WriteString("INTERSECT")
+		}
+		formatter.Break()
+		formatter.WriteExpr(s.Intersect)
 	}
 }
 

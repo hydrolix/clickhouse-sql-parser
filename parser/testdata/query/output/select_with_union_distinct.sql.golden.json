@@ -57,8 +57,7 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": {
+    "Union": {
       "SelectPos": 59,
       "StatementEnd": 121,
       "With": null,
@@ -124,10 +123,17 @@
           "NameEnd": 121
         }
       },
-      "UnionAll": null,
-      "UnionDistinct": null,
-      "Except": null
+      "Union": null,
+      "UnionMode": "",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
     },
-    "Except": null
+    "UnionMode": "DISTINCT",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]

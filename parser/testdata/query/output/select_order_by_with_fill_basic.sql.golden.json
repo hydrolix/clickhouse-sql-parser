@@ -184,9 +184,12 @@
               "Limit": null,
               "Settings": null,
               "Format": null,
-              "UnionAll": null,
-              "UnionDistinct": null,
-              "Except": null
+              "Union": null,
+              "UnionMode": "",
+              "Except": null,
+              "ExceptMode": "",
+              "Intersect": null,
+              "IntersectMode": ""
             }
           },
           "HasFinal": false
@@ -231,8 +234,11 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
-    "Except": null
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]
