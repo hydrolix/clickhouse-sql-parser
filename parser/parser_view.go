@@ -141,6 +141,15 @@ func (p *Parser) parseCreateMaterializedView(pos Pos) (*CreateMaterializedView, 
 		createMaterializedView.StatementEnd = p.Pos()
 	}
 
+	// COMMENT can appear either before or after AS SELECT.
+	// ClickHouse 26.2+ outputs COMMENT before AS SELECT in SHOW CREATE TABLE,
+	// while 25.8 outputs it after AS SELECT.
+	comment, err := p.tryParseComment()
+	if err != nil {
+		return nil, err
+	}
+	createMaterializedView.Comment = comment
+
 	if p.tryConsumeKeywords(KeywordAs) {
 		subQuery, err := p.parseSubQuery(p.Pos())
 		if err != nil {
@@ -150,11 +159,14 @@ func (p *Parser) parseCreateMaterializedView(pos Pos) (*CreateMaterializedView, 
 		createMaterializedView.StatementEnd = subQuery.End()
 	}
 
-	comment, err := p.tryParseComment()
-	if err != nil {
-		return nil, err
+	// Also try parsing COMMENT after AS SELECT (ClickHouse 25.x format)
+	if createMaterializedView.Comment == nil {
+		comment, err = p.tryParseComment()
+		if err != nil {
+			return nil, err
+		}
+		createMaterializedView.Comment = comment
 	}
-	createMaterializedView.Comment = comment
 	return createMaterializedView, nil
 }
 
@@ -227,6 +239,13 @@ func (p *Parser) parseCreateView(pos Pos, orReplace bool) (*CreateView, error) {
 		}
 		createView.TableSchema = tableSchema
 	}
+
+	// parse COMMENT clause if exists (before AS SELECT)
+	comment, err := p.tryParseComment()
+	if err != nil {
+		return nil, err
+	}
+	createView.Comment = comment
 
 	if p.tryConsumeKeywords(KeywordAs) {
 		subQuery, err := p.parseSubQuery(p.Pos())

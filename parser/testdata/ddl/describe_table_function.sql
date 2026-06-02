@@ -1,0 +1,1 @@
+DESCRIBE numbers(10)

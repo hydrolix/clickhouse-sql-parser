@@ -1,0 +1,58 @@
+[
+  {
+    "DescribePos": 0,
+    "StatementEnd": 78,
+    "DescribeType": "",
+    "Target": {
+      "TablePos": 9,
+      "TableEnd": 12,
+      "Alias": null,
+      "Expr": {
+        "Database": null,
+        "Table": {
+          "Name": "foo",
+          "QuoteType": 1,
+          "NamePos": 9,
+          "NameEnd": 12
+        }
+      },
+      "HasFinal": false
+    },
+    "Settings": {
+      "SettingsPos": 13,
+      "ListEnd": 78,
+      "Items": [
+        {
+          "SettingsPos": 22,
+          "Name": {
+            "Name": "describe_compact_output",
+            "QuoteType": 1,
+            "NamePos": 22,
+            "NameEnd": 45
+          },
+          "Expr": {
+            "NumPos": 46,
+            "NumEnd": 47,
+            "Literal": "1",
+            "Base": 10
+          }
+        },
+        {
+          "SettingsPos": 49,
+          "Name": {
+            "Name": "describe_include_subcolumns",
+            "QuoteType": 1,
+            "NamePos": 49,
+            "NameEnd": 76
+          },
+          "Expr": {
+            "NumPos": 77,
+            "NumEnd": 78,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    }
+  }
+]

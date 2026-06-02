@@ -1,0 +1,43 @@
+[
+  {
+    "DescribePos": 0,
+    "StatementEnd": 53,
+    "DescribeType": "TABLE",
+    "Target": {
+      "TablePos": 15,
+      "TableEnd": 18,
+      "Alias": null,
+      "Expr": {
+        "Database": null,
+        "Table": {
+          "Name": "foo",
+          "QuoteType": 1,
+          "NamePos": 15,
+          "NameEnd": 18
+        }
+      },
+      "HasFinal": false
+    },
+    "Settings": {
+      "SettingsPos": 19,
+      "ListEnd": 53,
+      "Items": [
+        {
+          "SettingsPos": 28,
+          "Name": {
+            "Name": "describe_compact_output",
+            "QuoteType": 1,
+            "NamePos": 28,
+            "NameEnd": 51
+          },
+          "Expr": {
+            "NumPos": 52,
+            "NumEnd": 53,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    }
+  }
+]

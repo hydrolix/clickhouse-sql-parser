@@ -51,6 +51,7 @@ const (
 	Unquoted = iota + 1
 	DoubleQuote
 	BackTicks
+	SingleQuote
 )
 
 type Pos int
@@ -266,28 +267,44 @@ func (l *Lexer) consumeString() error {
 		isTextBlock = true
 	}
 	i := start
-	for l.peekOk(i) {
-		if isTextBlock {
+
+	if isTextBlock {
+		// Dollar-quoted text block: content is verbatim, terminator is the next `$$`.
+		for l.peekOk(i) {
 			if l.peekN(i) == '$' && l.peekOk(i+1) && l.peekN(i+1) == '$' {
 				break
 			}
-		} else {
-			if l.peekN(i) == '\'' {
-				escapedBySlash := l.peekOk(i-1) && l.peekN(i-1) == '\\'
-				escapedByDoubling := l.peekOk(i+1) && l.peekN(i+1) == '\''
-				if !escapedBySlash && !escapedByDoubling {
-					break
-				}
-				if escapedByDoubling && !escapedBySlash {
+			i++
+		}
+		if !l.peekOk(i) {
+			return errors.New("invalid string")
+		}
+	} else {
+		endChar := byte('\'')
+		for l.peekOk(i) {
+			c := l.peekN(i)
+			// backslash escape
+			if c == '\\' {
+				i++
+				if l.peekOk(i) {
 					i++
 				}
-
+				continue
 			}
+			// single quote
+			if c == endChar {
+				// double single quote ''
+				if l.peekOk(i+1) && l.peekN(i+1) == endChar {
+					i += 2
+					continue
+				}
+				break
+			}
+			i++
 		}
-		i++
-	}
-	if !l.peekOk(i) {
-		return errors.New("invalid string")
+		if !l.peekOk(i) || l.peekN(i) != endChar {
+			return errors.New("invalid string")
+		}
 	}
 
 	l.lastToken = &Token{
@@ -394,15 +411,13 @@ func (l *Lexer) consumeToken() error {
 		if err := l.consumeNumber(); err != nil {
 			l.restoreState(savedState)
 			return l.consumeIdent(Pos(l.current))
-		} else {
-			return err
 		}
+		return nil
 	case '$':
 		if l.peekOk(1) && l.peekN(1) == '$' {
 			return l.consumeString()
-		} else {
-			return l.consumeIdent(Pos(l.current))
 		}
+		return l.consumeIdent(Pos(l.current))
 	case '`', '"':
 		return l.consumeIdent(Pos(l.current))
 	case '\'':

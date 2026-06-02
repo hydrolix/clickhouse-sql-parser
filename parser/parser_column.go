@@ -7,7 +7,7 @@ import (
 
 const (
 	PrecedenceUnknown = iota
-	PrecedenceIndent
+	PrecedenceIdent
 	PrecedenceOr
 	PrecedenceAnd
 	PrecedenceQuery
@@ -17,6 +17,7 @@ const (
 	PrecedenceCompare
 	PrecedenceBetweenLike
 	precedenceIn
+	PrecedenceConcat
 	PrecedenceAddSub
 	PrecedenceMulDivMod
 	PrecedenceBracket
@@ -37,7 +38,7 @@ func (p *Parser) getNextPrecedence() int {
 	case p.matchKeyword(KeywordOr):
 		return PrecedenceOr
 	case p.matchVariable():
-		return PrecedenceIndent
+		return PrecedenceIdent
 	case p.matchKeyword(KeywordAnd):
 		return PrecedenceAnd
 	case p.matchKeyword(KeywordIs):
@@ -52,8 +53,9 @@ func (p *Parser) getNextPrecedence() int {
 		p.matchTokenKind(TokenKindGE), p.matchTokenKind(TokenKindGT), p.matchTokenKind(TokenKindDoubleEQ),
 		p.matchTokenKind(TokenKindNE), p.matchTokenKind("<>"):
 		return PrecedenceCompare
-	case p.matchTokenKind(TokenKindPlus), p.matchTokenKind(TokenKindMinus),
-		p.matchTokenKind(TokenKindConcat):
+	case p.matchTokenKind(TokenKindConcat):
+		return PrecedenceConcat
+	case p.matchTokenKind(TokenKindPlus), p.matchTokenKind(TokenKindMinus):
 		return PrecedenceAddSub
 	case p.matchTokenKind(TokenKindMul), p.matchTokenKind(TokenKindDiv), p.matchTokenKind(TokenKindMod):
 		return PrecedenceMulDivMod
@@ -65,8 +67,7 @@ func (p *Parser) getNextPrecedence() int {
 		return PrecedenceDoubleColon
 	case p.matchTokenKind(TokenKindDot):
 		return PrecedenceDot
-	case p.matchKeyword(KeywordBetween), p.matchKeyword(KeywordLike), p.matchKeyword(KeywordIlike),
-		p.matchKeyword(KeywordRegexp):
+	case p.matchKeyword(KeywordBetween), p.matchKeyword(KeywordLike), p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordRegexp):
 		return PrecedenceBetweenLike
 	case p.matchKeyword(KeywordIn):
 		return precedenceIn
@@ -89,7 +90,8 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		p.matchKeyword(KeywordIn), p.matchKeyword(KeywordLike),
 		p.matchKeyword(KeywordIlike), p.matchKeyword(KeywordRegexp),
 		p.matchKeyword(KeywordAnd), p.matchKeyword(KeywordOr),
-		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ), p.matchVariable():
+		p.matchTokenKind(TokenKindArrow), p.matchTokenKind(TokenKindDoubleEQ),
+		p.matchVariable():
 		op := p.last().ToString()
 		_ = p.lexer.consumeToken()
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)
@@ -137,7 +139,12 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		return p.parseBetweenClause(expr)
 	case p.matchKeyword(KeywordGlobal):
 		_ = p.lexer.consumeToken()
-		if p.expectKeyword(KeywordIn) != nil && (p.expectKeyword(KeywordNot) != nil || p.expectKeyword(KeywordIn) != nil) {
+		op := "GLOBAL IN"
+		if p.matchKeyword(KeywordNot) {
+			_ = p.lexer.consumeToken()
+			op = "GLOBAL NOT IN"
+		}
+		if p.expectKeyword(KeywordIn) != nil {
 			return nil, fmt.Errorf("expected IN or NOT IN after GLOBAL, got %s", p.lastTokenKind())
 		}
 		rightExpr, err := p.parseSubExpr(p.Pos(), precedence)
@@ -146,7 +153,7 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		}
 		return &BinaryOperation{
 			LeftExpr:  expr,
-			Operation: "GLOBAL IN",
+			Operation: TokenKind(op),
 			RightExpr: rightExpr,
 		}, nil
 	case p.matchTokenKind(TokenKindDot):
@@ -173,8 +180,9 @@ func (p *Parser) parseInfix(expr Expr, precedence int) (Expr, error) {
 		case p.matchKeyword(KeywordIn):
 		case p.matchKeyword(KeywordLike):
 		case p.matchKeyword(KeywordIlike):
+		case p.matchKeyword(KeywordRegexp):
 		default:
-			return nil, fmt.Errorf("expected IN, LIKE or ILIKE after NOT, got %s", p.lastTokenKind())
+			return nil, fmt.Errorf("expected IN, LIKE, ILIKE or REGEXP after NOT, got %s", p.lastTokenKind())
 		}
 		if p.matchKeyword(KeywordBetween) {
 			return p.parseBetweenClause(expr)
@@ -267,23 +275,7 @@ func (p *Parser) parseTernaryExpr(condition Expr) (*TernaryOperation, error) {
 	}, nil
 }
 
-func (p *Parser) parseColumnExtractExpr(pos Pos) (*ExtractExpr, error) {
-	if err := p.expectKeyword(KeywordExtract); err != nil {
-		return nil, err
-	}
-	if err := p.expectTokenKind(TokenKindLParen); err != nil {
-		return nil, err
-	}
-
-	// parse interval
-	ident, err := p.parseIdent()
-	if err != nil {
-		return nil, err
-	}
-	if !intervalUnits.Contains(strings.ToUpper(ident.Name)) {
-		return nil, fmt.Errorf("unknown interval type: <%q>", ident.Name)
-	}
-
+func (p *Parser) parseExtractFrom(ident *Ident) (*IntervalFrom, error) {
 	fromPos := p.Pos()
 	if err := p.expectKeyword(KeywordFrom); err != nil {
 		return nil, err
@@ -293,14 +285,60 @@ func (p *Parser) parseColumnExtractExpr(pos Pos) (*ExtractExpr, error) {
 	if err != nil {
 		return nil, err
 	}
+	return &IntervalFrom{
+		Interval: ident,
+		FromPos:  fromPos,
+		FromExpr: expr,
+	}, nil
+}
+
+func (p *Parser) parseColumnExtractExpr(pos Pos) (*ExtractExpr, error) {
+	if err := p.expectKeyword(KeywordExtract); err != nil {
+		return nil, err
+	}
+	if err := p.expectTokenKind(TokenKindLParen); err != nil {
+		return nil, err
+	}
+
+	parameters := make([]Expr, 0)
+	for !p.lexer.isEOF() {
+		expr, err := p.parseExpr(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+
+		var param Expr
+		if ident, ok := expr.(*Ident); ok {
+			if intervalUnits.Contains(strings.ToUpper(ident.Name)) && p.matchKeyword(KeywordFrom) {
+				param, err = p.parseExtractFrom(ident)
+				if err != nil {
+					return nil, err
+				}
+				parameters = append(parameters, param)
+			} else {
+				parameters = append(parameters, expr)
+			}
+		} else {
+			parameters = append(parameters, expr)
+		}
+
+		if p.tryConsumeTokenKind(TokenKindComma) == nil {
+			break
+		}
+	}
+
+	if len(parameters) == 0 {
+		return nil, fmt.Errorf("EXTRACT requires at least one parameter")
+	}
+
+	extractEnd := p.Pos()
 	if err := p.expectTokenKind(TokenKindRParen); err != nil {
 		return nil, err
 	}
 	return &ExtractExpr{
 		ExtractPos: pos,
-		Interval:   ident,
-		FromPos:    fromPos,
-		FromExpr:   expr,
+		ExtractEnd: extractEnd,
+		Parameters: parameters,
 	}, nil
 }
 
@@ -350,6 +388,42 @@ func (p *Parser) peekKeyword(keyword string) bool {
 	return token.Kind == TokenKindKeyword && strings.EqualFold(token.String, keyword)
 }
 
+// isSelectItemTerminatorKeyword checks whether the current token is a keyword
+// that begins a clause following the SELECT item list. When true, we should not
+// treat the keyword itself as a bare alias.
+func (p *Parser) isSelectItemTerminatorKeyword() bool {
+	switch {
+	case p.matchKeyword(KeywordFrom):
+		return true
+	case p.matchKeyword(KeywordWhere):
+		return true
+	case p.matchKeyword(KeywordPrewhere):
+		return true
+	case p.matchKeyword(KeywordGroup):
+		return true
+	case p.matchKeyword(KeywordHaving):
+		return true
+	case p.matchKeyword(KeywordWindow):
+		return true
+	case p.matchKeyword(KeywordOrder):
+		return true
+	case p.matchKeyword(KeywordLimit):
+		return true
+	case p.matchKeyword(KeywordOffset):
+		return true
+	case p.matchKeyword(KeywordSettings):
+		return true
+	case p.matchKeyword(KeywordFormat):
+		return true
+	case p.matchKeyword(KeywordUnion):
+		return true
+	case p.matchKeyword(KeywordExcept):
+		return true
+	default:
+		return false
+	}
+}
+
 func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 	// Should parse the keyword as an identifier if the keyword is followed by one of comma, `AS`.
 	// For example: `SELECT 1 as interval GROUP BY interval` is a valid syntax in ClickHouse.
@@ -372,6 +446,10 @@ func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 		return p.parseColumnCastExpr(pos)
 	case p.matchKeyword(KeywordCase):
 		return p.parseColumnCaseExpr(pos)
+	case p.matchKeyword(KeywordSelect):
+		return p.parseSelectQuery(pos)
+	case p.matchKeyword(KeywordExtract):
+		return p.parseColumnExtractExpr(pos)
 	case p.matchTokenKind(TokenKindIdent):
 		return p.parseIdentOrFunction(pos)
 	case p.matchTokenKind(TokenKindString): // string literal
@@ -393,7 +471,9 @@ func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 	case p.matchTokenKind(TokenKindLBrace):
 		// The map literal string also starts with '{', so we need to check the next token
 		// to determine if it is a map literal or a query param.
-		if p.peekTokenKind(TokenKindIdent) {
+		// Treat both identifiers and keywords as identifier-like for placeholders.
+		// parseIdent accepts keywords-as-ident, so this is safe.
+		if p.peekTokenKind(TokenKindIdent) || p.peekTokenKind(TokenKindKeyword) {
 			return p.parseQueryParam(p.Pos())
 		}
 		return p.parseMapLiteral(p.Pos())
@@ -548,8 +628,24 @@ func (p *Parser) parseInterval(requireKeyword bool) (*IntervalExpr, error) {
 	}, nil
 }
 
-func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
+func (p *Parser) parseFunctionExpr(_ Pos) (*FunctionExpr, error) {
 	// parse function name
+	name, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+	// parse function params
+	params, err := p.parseFunctionParams(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	return &FunctionExpr{
+		Name:   name,
+		Params: params,
+	}, nil
+}
+
+func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
 	if !p.matchKeyword(KeywordExcept) {
 		return nil, fmt.Errorf("expected EXCEPT clause but got %s", p.lastTokenKind())
 	}
@@ -570,26 +666,7 @@ func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
 				},
 			},
 		}, nil
-	} else {
-		params, err := p.parseFunctionParams(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		return &FunctionExpr{
-			Name:   name,
-			Params: params,
-		}, nil
 	}
-
-}
-
-func (p *Parser) parseFunctionExpr(_ Pos) (*FunctionExpr, error) {
-	// parse function name
-	name, err := p.parseIdent()
-	if err != nil {
-		return nil, err
-	}
-	// parse function params
 	params, err := p.parseFunctionParams(p.Pos())
 	if err != nil {
 		return nil, err
@@ -789,12 +866,18 @@ func (p *Parser) parseSelectItem() (*SelectItem, error) {
 	}
 
 	var alias *Ident
-	if p.tryConsumeKeywords(KeywordAs) {
+	switch {
+	case p.tryConsumeKeywords(KeywordAs):
 		alias, err = p.parseIdent()
 		if err != nil {
 			return nil, err
 		}
-	} else {
+	case p.lastTokenKind() == TokenKindKeyword && !p.isSelectItemTerminatorKeyword():
+		alias, err = p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+	default:
 		alias = p.tryParseIdent()
 	}
 
@@ -867,19 +950,28 @@ func (p *Parser) parseColumnCaseExpr(pos Pos) (*CaseExpr, error) {
 	return caseExpr, nil
 }
 
-func (p *Parser) parseColumnType(_ Pos) (ColumnType, error) { // nolint:funlen
+func (p *Parser) parseColumnType(_ Pos) (ColumnType, error) {
 	ident, err := p.parseIdent()
 	if err != nil {
 		return nil, err
 	}
-	if p.tryConsumeTokenKind(TokenKindLParen) != nil {
+
+	return p.parseColumnTypeArgs(ident)
+}
+
+func (p *Parser) parseColumnTypeArgs(ident *Ident) (ColumnType, error) { // nolint:funlen
+	if lParen := p.tryConsumeTokenKind(TokenKindLParen); lParen != nil {
 		switch {
 		case p.matchTokenKind(TokenKindIdent):
-			switch ident.Name {
-			case "Nested":
+			switch {
+			case strings.EqualFold(ident.Name, "Nested"):
 				return p.parseNestedType(ident, p.Pos())
-			case "JSON":
+			case strings.EqualFold(ident.Name, "JSON"):
 				return p.parseJSONType(ident, p.Pos())
+			case strings.EqualFold(ident.Name, "QBit"):
+				return p.parseColumnTypeWithParams(ident, p.Pos())
+			case strings.EqualFold(ident.Name, "Tuple"):
+				return p.parseNestedType(ident, p.Pos())
 			default:
 				return p.parseComplexType(ident, p.Pos())
 			}
@@ -893,6 +985,14 @@ func (p *Parser) parseColumnType(_ Pos) (ColumnType, error) { // nolint:funlen
 		case p.matchTokenKind(TokenKindInt), p.matchTokenKind(TokenKindFloat):
 			// fixed size
 			return p.parseColumnTypeWithParams(ident, p.Pos())
+		case p.matchTokenKind(TokenKindRParen):
+			rightParenPos := p.Pos()
+			_ = p.lexer.consumeToken()
+			return &TypeWithParams{
+				Name:          ident,
+				LeftParenPos:  lParen.Pos,
+				RightParenPos: rightParenPos,
+			}, nil
 		default:
 			return nil, fmt.Errorf("unexpected token kind: %v", p.lastTokenKind())
 		}
@@ -1057,7 +1157,51 @@ func (p *Parser) parseJSONOption() (*JSONOption, error) {
 			SkipPath: jsonPath,
 		}, nil
 	case p.matchTokenKind(TokenKindIdent):
-		return p.parseJSONMaxDynamicOptions(p.Pos())
+		// Could be max_dynamic_* option OR a type hint like: a.b String
+		// Lookahead to see if there's an '=' following the identifier path (max_dynamic_*)
+		// or if it's a path followed by a ColumnType.
+		// We'll parse a JSONPath first, then decide.
+		// Save lexer state by consuming as path greedily using existing helpers.
+		// Try: if single ident and next is '=' -> max_dynamic_*; else treat as path + type
+
+		// Peek next token after current ident without consuming type; we need to
+		// attempt to parse as max_dynamic_* first as it's existing behavior for a single ident.
+		// To support dotted paths, we need to capture path, then if '=' exists, it's option; otherwise parse type.
+		path, err := p.parseJSONPath()
+		if err != nil {
+			return nil, err
+		}
+		if p.tryConsumeTokenKind(TokenKindSingleEQ) != nil {
+			// This is a max_dynamic_* option; only valid when path is a single ident of that name
+			// Reconstruct handling similar to parseJSONMaxDynamicOptions but we already consumed ident and '='
+			// Determine which option based on the first ident name
+			if len(path.Idents) != 1 {
+				return nil, fmt.Errorf("unexpected token kind: %s", p.lastTokenKind())
+			}
+			name := path.Idents[0].Name
+			switch name {
+			case "max_dynamic_types":
+				number, err := p.parseNumber(p.Pos())
+				if err != nil {
+					return nil, err
+				}
+				return &JSONOption{MaxDynamicTypes: number}, nil
+			case "max_dynamic_paths":
+				number, err := p.parseNumber(p.Pos())
+				if err != nil {
+					return nil, err
+				}
+				return &JSONOption{MaxDynamicPaths: number}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token kind: %s", p.lastTokenKind())
+			}
+		}
+		// Otherwise, expect a ColumnType as a type hint for the JSON subpath
+		colType, err := p.parseColumnType(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return &JSONOption{Column: &JSONTypeHint{Path: path, Type: colType}}, nil
 	default:
 		return nil, fmt.Errorf("unexpected token kind: %s", p.lastTokenKind())
 	}
@@ -1095,10 +1239,11 @@ func (p *Parser) parseJSONType(name *Ident, pos Pos) (*JSONType, error) {
 }
 
 func (p *Parser) parseNestedType(name *Ident, pos Pos) (*NestedType, error) {
-	columns, err := p.parseTableColumns()
+	columns, err := p.parseNestedTypeFields()
 	if err != nil {
 		return nil, err
 	}
+
 	rightParenPos := p.Pos()
 	if err := p.expectTokenKind(TokenKindRParen); err != nil {
 		return nil, err
@@ -1108,6 +1253,121 @@ func (p *Parser) parseNestedType(name *Ident, pos Pos) (*NestedType, error) {
 		RightParenPos: rightParenPos,
 		Name:          name,
 		Columns:       columns,
+	}, nil
+}
+
+func (p *Parser) parseNestedTypeFields() ([]Expr, error) {
+	switch {
+	case p.lexer.isEOF() || p.matchTokenKind(TokenKindRParen):
+		// Cases like `Tuple()`
+		return []Expr{}, nil
+	case p.matchTokenKind(TokenKindIdent):
+		ident, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+
+		if p.matchTokenKind(TokenKindIdent) {
+			// Cases like `Tuple(a Int, b String)` or `Nested(a Int, b String)`
+			return p.parseNestedTypeFieldsWithNames(ident)
+		}
+
+		// Cases like `Tuple(Int, String)`
+		return p.parseNestedTypeFieldsWithoutNames(ident)
+	default:
+		return nil, fmt.Errorf("unexpected token kind: %s", p.lastTokenKind())
+	}
+}
+
+func (p *Parser) parseNestedTypeFieldsWithNames(columnName *Ident) ([]Expr, error) {
+	columns := make([]Expr, 0)
+
+	columnType, err := p.parseColumnType(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	columns = append(columns, &ColumnDef{
+		NamePos: columnName.Pos(),
+		Name: &NestedIdentifier{
+			Ident: columnName,
+		},
+		Type:      columnType,
+		ColumnEnd: columnType.End(),
+	})
+
+	if p.tryConsumeTokenKind(TokenKindComma) == nil {
+		return columns, nil
+	}
+
+	for !p.lexer.isEOF() && !p.matchTokenKind(TokenKindRParen) {
+		column, err := p.parseNestedTypeFieldWithName()
+		if err != nil {
+			return nil, err
+		}
+		if column == nil {
+			break
+		}
+		columns = append(columns, column)
+
+		if p.tryConsumeTokenKind(TokenKindComma) == nil {
+			break
+		}
+	}
+
+	return columns, nil
+}
+
+func (p *Parser) parseNestedTypeFieldsWithoutNames(columnType *Ident) ([]Expr, error) {
+	columns := make([]Expr, 0)
+
+	column, err := p.parseColumnTypeArgs(columnType)
+	if err != nil {
+		return nil, err
+	}
+
+	columns = append(columns, column)
+
+	if p.tryConsumeTokenKind(TokenKindComma) == nil {
+		return columns, nil
+	}
+
+	for !p.lexer.isEOF() && !p.matchTokenKind(TokenKindRParen) {
+		column, err := p.parseColumnType(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		if column == nil {
+			break
+		}
+		columns = append(columns, column)
+
+		if p.tryConsumeTokenKind(TokenKindComma) == nil {
+			break
+		}
+	}
+
+	return columns, nil
+}
+
+func (p *Parser) parseNestedTypeFieldWithName() (Expr, error) {
+	name, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+
+	columnType, err := p.parseColumnType(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	return &ColumnDef{
+		NamePos: name.Pos(),
+		Name: &NestedIdentifier{
+			Ident: name,
+		},
+		Type:      columnType,
+		ColumnEnd: columnType.End(),
 	}, nil
 }
 
@@ -1121,27 +1381,34 @@ func (p *Parser) tryParseCompressionCodecs(pos Pos) (*CompressionCodec, error) {
 	}
 
 	// parse codec name
-	name, err := p.parseIdent()
+	codecType, err := p.parseIdent()
 	if err != nil {
 		return nil, err
 	}
 	// parse DELTA if  CODEC(Delta, ZSTD(1))
 	// or CODEC(Delta(9), ZSTD(1)) or CODEC(T64, ZSTD(1))
-	var codecType *Ident
+	var name *Ident
 	var typeLevel *NumberLiteral
-	switch strings.ToUpper(name.Name) {
+	switch strings.ToUpper(codecType.Name) {
 	case "DELTA", "DOUBLEDELTA", "T64", "GORILLA":
-		codecType = name
 		// try parse delta level
 		typeLevel, err = p.tryParseCompressionLevel(p.Pos())
 		if err != nil {
 			return nil, err
 		}
-		// consume comma
-		if err := p.expectTokenKind(TokenKindComma); err != nil {
-			return nil, err
+
+		if p.matchTokenKind(TokenKindComma) {
+			if err := p.expectTokenKind(TokenKindComma); err != nil {
+				return nil, err
+			}
+			name, err = p.parseIdent()
+			if err != nil {
+				return nil, err
+			}
 		}
-		name, err = p.parseIdent()
+	case "ZSTD", "LZ4HC", "LH4":
+		// For compression codecs, try to parse level
+		typeLevel, err = p.tryParseCompressionLevel(p.Pos())
 		if err != nil {
 			return nil, err
 		}
@@ -1149,11 +1416,13 @@ func (p *Parser) tryParseCompressionCodecs(pos Pos) (*CompressionCodec, error) {
 
 	var level *NumberLiteral
 	// TODO: check if the codec name is valid
-	switch strings.ToUpper(name.Name) {
-	case "ZSTD", "LZ4HC", "LH4":
-		level, err = p.tryParseCompressionLevel(p.Pos())
-		if err != nil {
-			return nil, err
+	if name != nil {
+		switch strings.ToUpper(name.Name) {
+		case "ZSTD", "LZ4HC", "LH4":
+			level, err = p.tryParseCompressionLevel(p.Pos())
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -1162,6 +1431,21 @@ func (p *Parser) tryParseCompressionCodecs(pos Pos) (*CompressionCodec, error) {
 		return nil, err
 	}
 
+	// If there's only one codec (no second name), store it in Name field instead of Type
+	// This handles cases like CODEC(DoubleDelta) or CODEC(ZSTD(1))
+	if name == nil {
+		return &CompressionCodec{
+			CodecPos:      pos,
+			RightParenPos: rightParenPos,
+			Type:          nil,
+			TypeLevel:     nil,
+			Name:          codecType,
+			Level:         typeLevel,
+		}, nil
+	}
+
+	// Two codecs: Type is the preprocessing codec, Name is the compression codec
+	// e.g., CODEC(DoubleDelta, ZSTD(1))
 	return &CompressionCodec{
 		CodecPos:      pos,
 		RightParenPos: rightParenPos,

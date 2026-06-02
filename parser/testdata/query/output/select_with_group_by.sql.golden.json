@@ -5,6 +5,7 @@
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -88,7 +89,6 @@
         "HasFinal": false
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": null,
@@ -224,6 +224,7 @@
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -307,7 +308,6 @@
         "HasFinal": false
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": null,

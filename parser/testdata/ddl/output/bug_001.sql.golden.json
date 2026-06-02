@@ -58,6 +58,7 @@
         "With": null,
         "Top": null,
         "HasDistinct": false,
+        "DistinctOn": null,
         "SelectItems": [
           {
             "Expr": {
@@ -522,31 +523,32 @@
             "HasFinal": false
           }
         },
-        "ArrayJoin": null,
         "Window": null,
         "Prewhere": null,
         "Where": {
           "WherePos": 606,
           "Expr": {
             "LeftExpr": {
-              "Database": {
-                "Name": "db",
-                "QuoteType": 1,
-                "NamePos": 612,
-                "NameEnd": 614
-              },
-              "Table": {
-                "Name": "table",
-                "QuoteType": 1,
-                "NamePos": 615,
-                "NameEnd": 620
-              },
-              "Column": {
-                "Name": "event",
-                "QuoteType": 1,
-                "NamePos": 621,
-                "NameEnd": 626
-              }
+              "Fields": [
+                {
+                  "Name": "db",
+                  "QuoteType": 1,
+                  "NamePos": 612,
+                  "NameEnd": 614
+                },
+                {
+                  "Name": "table",
+                  "QuoteType": 1,
+                  "NamePos": 615,
+                  "NameEnd": 620
+                },
+                {
+                  "Name": "event",
+                  "QuoteType": 1,
+                  "NamePos": 621,
+                  "NameEnd": 626
+                }
+              ]
             },
             "Operation": "=",
             "RightExpr": {

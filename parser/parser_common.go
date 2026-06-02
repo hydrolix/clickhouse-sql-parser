@@ -51,6 +51,10 @@ func (p *Parser) matchVariable() bool {
 
 }
 
+func (p *Parser) matchVariable() bool {
+	return p.matchTokenKind(TokenKindIdent) && p.last().QuoteType != BackTicks && strings.HasPrefix(p.last().String, "$")
+}
+
 // expectTokenKind consumes the last token if it is the given kind.
 func (p *Parser) expectTokenKind(kind TokenKind) error {
 	if lastToken := p.tryConsumeTokenKind(kind); lastToken != nil {
@@ -146,11 +150,36 @@ func (p *Parser) parseIdentOrStar() (*Ident, error) {
 	}
 }
 
+func (p *Parser) parseIdentOrString() (*Ident, error) {
+	switch {
+	case p.matchTokenKind(TokenKindIdent):
+		return p.parseIdent()
+	case p.matchTokenKind(TokenKindString):
+		lastToken := p.last()
+		_ = p.lexer.consumeToken()
+		return &Ident{
+			NamePos:   lastToken.Pos,
+			NameEnd:   lastToken.End,
+			Name:      lastToken.String,
+			QuoteType: SingleQuote, // Treat string literals as single-quoted identifiers
+		}, nil
+	default:
+		return nil, fmt.Errorf("expected <ident> or <string>, but got %q", p.lastTokenKind())
+	}
+}
+
 func (p *Parser) tryParseDotIdent(_ Pos) (*Ident, error) {
 	if p.tryConsumeTokenKind(TokenKindDot) == nil {
 		return nil, nil // nolint
 	}
 	return p.parseIdent()
+}
+
+func (p *Parser) tryParseDotIdentOrString(_ Pos) (*Ident, error) {
+	if p.tryConsumeTokenKind(TokenKindDot) == nil {
+		return nil, nil // nolint
+	}
+	return p.parseIdentOrString()
 }
 
 func (p *Parser) parseUUID() (*UUID, error) {
@@ -294,11 +323,13 @@ func (p *Parser) parseLiteral(pos Pos) (Literal, error) {
 		return p.parseNumber(pos)
 	case p.matchTokenKind(TokenKindString):
 		return p.parseString(pos)
+	case p.matchTokenKind(TokenKindIdent):
+		return p.parseIdent()
 	case p.matchKeyword(KeywordNull):
 		// accept the NULL keyword
 		return &NullLiteral{NullPos: pos}, nil
 	default:
-		return nil, fmt.Errorf("expected <int>, <string> or keyword <NULL>, but got %q", p.lastTokenKind())
+		return nil, fmt.Errorf("expected <int>, <string>, <ident> or keyword <NULL>, but got %q", p.lastTokenKind())
 	}
 }
 

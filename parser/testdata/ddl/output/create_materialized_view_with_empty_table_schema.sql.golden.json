@@ -137,9 +137,11 @@
               "ColumnArgList": null
             },
             "Alias": null,
-            "Direction": ""
+            "Direction": "",
+            "Fill": null
           }
-        ]
+        ],
+        "Interpolate": null
       }
     },
     "HasEmpty": false,
@@ -152,6 +154,7 @@
         "With": null,
         "Top": null,
         "HasDistinct": false,
+        "DistinctOn": null,
         "SelectItems": [
           {
             "Expr": {
@@ -247,6 +250,7 @@
                     "With": null,
                     "Top": null,
                     "HasDistinct": false,
+                    "DistinctOn": null,
                     "SelectItems": [
                       {
                         "Expr": {
@@ -303,6 +307,7 @@
                           "OverExpr": {
                             "LeftParenPos": 306,
                             "RightParenPos": 347,
+                            "WindowName": null,
                             "PartitionBy": {
                               "PartitionPos": 306,
                               "Expr": {
@@ -367,9 +372,11 @@
                                     }
                                   },
                                   "Alias": null,
-                                  "Direction": ""
+                                  "Direction": "",
+                                  "Fill": null
                                 }
-                              ]
+                              ],
+                              "Interpolate": null
                             },
                             "Frame": null
                           }
@@ -411,7 +418,6 @@
                         "HasFinal": false
                       }
                     },
-                    "ArrayJoin": null,
                     "Window": null,
                     "Prewhere": null,
                     "Where": {
@@ -513,7 +519,6 @@
             "HasFinal": false
           }
         },
-        "ArrayJoin": null,
         "Window": null,
         "Prewhere": null,
         "Where": {

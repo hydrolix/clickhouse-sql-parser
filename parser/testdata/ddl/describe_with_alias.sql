@@ -1,0 +1,1 @@
+DESCRIBE foo AS f

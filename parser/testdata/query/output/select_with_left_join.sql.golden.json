@@ -1,7 +1,7 @@
 [
   {
     "SelectPos": 0,
-    "StatementEnd": 121,
+    "StatementEnd": 151,
     "With": {
       "WithPos": 0,
       "EndPos": 68,
@@ -20,6 +20,7 @@
             "With": null,
             "Top": null,
             "HasDistinct": false,
+            "DistinctOn": null,
             "SelectItems": [
               {
                 "Expr": {
@@ -38,7 +39,6 @@
               }
             ],
             "From": null,
-            "ArrayJoin": null,
             "Window": null,
             "Prewhere": null,
             "Where": null,
@@ -69,6 +69,7 @@
             "With": null,
             "Top": null,
             "HasDistinct": false,
+            "DistinctOn": null,
             "SelectItems": [
               {
                 "Expr": {
@@ -87,7 +88,6 @@
               }
             ],
             "From": null,
-            "ArrayJoin": null,
             "Window": null,
             "Prewhere": null,
             "Where": null,
@@ -108,6 +108,7 @@
     },
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -195,7 +196,6 @@
         "Constraints": null
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": null,

@@ -1,6 +1,6 @@
 module github.com/hydrolix/clickhouse-sql-parser
 
-go 1.18
+go 1.21.0
 
 require (
 	github.com/AfterShip/clickhouse-sql-parser v0.4.10

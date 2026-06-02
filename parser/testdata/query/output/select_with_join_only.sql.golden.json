@@ -1,10 +1,11 @@
 [
   {
     "SelectPos": 0,
-    "StatementEnd": 17,
+    "StatementEnd": 36,
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -91,7 +92,6 @@
         "Constraints": null
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": null,

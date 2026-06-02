@@ -5,6 +5,7 @@
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -110,7 +111,6 @@
         "HasFinal": false
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": {
@@ -214,9 +214,11 @@
             "ColumnArgList": null
           },
           "Alias": null,
-          "Direction": "ASC"
+          "Direction": "ASC",
+          "Fill": null
         }
-      ]
+      ],
+      "Interpolate": null
     },
     "LimitBy": null,
     "Limit": null,

@@ -1,9 +1,5 @@
 package parser
 
-import (
-	"strings"
-)
-
 type OrderDirection string
 
 const (
@@ -15,7 +11,7 @@ const (
 type Expr interface {
 	Pos() Pos
 	End() Pos
-	String() string
+	FormatSQL(*Formatter)
 	Accept(visitor ASTVisitor) error
 }
 
@@ -43,20 +39,6 @@ func (s *SelectItem) End() Pos {
 		return s.Modifiers[len(s.Modifiers)-1].End()
 	}
 	return s.Expr.End()
-}
-
-func (s *SelectItem) String() string {
-	var builder strings.Builder
-	builder.WriteString(s.Expr.String())
-	for _, modifier := range s.Modifiers {
-		builder.WriteByte(' ')
-		builder.WriteString(modifier.String())
-	}
-	if s.Alias != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(s.Alias.String())
-	}
-	return builder.String()
 }
 
 func (s *SelectItem) Accept(visitor ASTVisitor) error {
@@ -91,10 +73,6 @@ func (o *OperationExpr) End() Pos {
 	return o.OperationPos + Pos(len(o.Kind))
 }
 
-func (o *OperationExpr) String() string {
-	return strings.ToUpper(string(o.Kind))
-}
-
 func (o *OperationExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(o)
 	defer visitor.Leave(o)
@@ -113,16 +91,6 @@ func (t *TernaryOperation) Pos() Pos {
 
 func (t *TernaryOperation) End() Pos {
 	return t.FalseExpr.End()
-}
-
-func (t *TernaryOperation) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Condition.String())
-	builder.WriteString(" ? ")
-	builder.WriteString(t.TrueExpr.String())
-	builder.WriteString(" : ")
-	builder.WriteString(t.FalseExpr.String())
-	return builder.String()
 }
 
 func (t *TernaryOperation) Accept(visitor ASTVisitor) error {
@@ -154,25 +122,6 @@ func (p *BinaryOperation) Pos() Pos {
 
 func (p *BinaryOperation) End() Pos {
 	return p.RightExpr.End()
-}
-
-func (p *BinaryOperation) String() string {
-	var builder strings.Builder
-	builder.WriteString(p.LeftExpr.String())
-	if p.Operation != TokenKindDash {
-		builder.WriteByte(' ')
-	}
-	if p.HasNot {
-		builder.WriteString("NOT ")
-	} else if p.HasGlobal {
-		builder.WriteString("GLOBAL ")
-	}
-	builder.WriteString(string(p.Operation))
-	if p.Operation != TokenKindDash {
-		builder.WriteByte(' ')
-	}
-	builder.WriteString(p.RightExpr.String())
-	return builder.String()
 }
 
 func (p *BinaryOperation) Accept(visitor ASTVisitor) error {
@@ -213,14 +162,6 @@ func (i *IndexOperation) End() Pos {
 	return i.Index.End()
 }
 
-func (i *IndexOperation) String() string {
-	var builder strings.Builder
-	builder.WriteString(i.Object.String())
-	builder.WriteString(string(i.Operation))
-	builder.WriteString(i.Index.String())
-	return builder.String()
-}
-
 type JoinTableExpr struct {
 	Table        *TableExpr
 	StatementEnd Pos
@@ -248,19 +189,6 @@ func (j *JoinTableExpr) End() Pos {
 	return j.StatementEnd
 }
 
-func (j *JoinTableExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(j.Table.String())
-	if j.SampleRatio != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(j.SampleRatio.String())
-	}
-	if j.HasFinal {
-		builder.WriteString(" FINAL")
-	}
-	return builder.String()
-}
-
 type AlterTableClause interface {
 	Expr
 	AlterType() string
@@ -284,24 +212,6 @@ func (a *AlterTable) End() Pos {
 
 func (a *AlterTable) Type() string {
 	return "ALTER TABLE"
-}
-
-func (a *AlterTable) String() string {
-	var builder strings.Builder
-	builder.WriteString("ALTER TABLE ")
-	builder.WriteString(a.TableIdentifier.String())
-	if a.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(a.OnCluster.String())
-	}
-	for i, expr := range a.AlterExprs {
-		builder.WriteString(" ")
-		builder.WriteString(expr.String())
-		if i != len(a.AlterExprs)-1 {
-			builder.WriteString(",")
-		}
-	}
-	return builder.String()
 }
 
 func (a *AlterTable) Accept(visitor ASTVisitor) error {
@@ -346,17 +256,6 @@ func (a *AlterTableAttachPartition) AlterType() string {
 	return "ATTACH_PARTITION"
 }
 
-func (a *AlterTableAttachPartition) String() string {
-	var builder strings.Builder
-	builder.WriteString("ATTACH ")
-	builder.WriteString(a.Partition.String())
-	if a.From != nil {
-		builder.WriteString(" FROM ")
-		builder.WriteString(a.From.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableAttachPartition) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -387,17 +286,6 @@ func (a *AlterTableDetachPartition) End() Pos {
 
 func (a *AlterTableDetachPartition) AlterType() string {
 	return "DETACH_PARTITION"
-}
-
-func (a *AlterTableDetachPartition) String() string {
-	var builder strings.Builder
-	builder.WriteString("DETACH ")
-	builder.WriteString(a.Partition.String())
-	if a.Settings != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(a.Settings.String())
-	}
-	return builder.String()
 }
 
 func (a *AlterTableDetachPartition) Accept(visitor ASTVisitor) error {
@@ -436,20 +324,6 @@ func (a *AlterTableDropPartition) AlterType() string {
 	return "DROP_PARTITION"
 }
 
-func (a *AlterTableDropPartition) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP ")
-	if a.HasDetached {
-		builder.WriteString("DETACHED ")
-	}
-	builder.WriteString(a.Partition.String())
-	if a.Settings != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(a.Settings.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableDropPartition) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -477,22 +351,6 @@ func (a *AlterTableMaterializeProjection) End() Pos {
 
 func (a *AlterTableMaterializeProjection) AlterType() string {
 	return "MATERIALIZE_PROJECTION"
-}
-
-func (a *AlterTableMaterializeProjection) String() string {
-	var builder strings.Builder
-	builder.WriteString("MATERIALIZE PROJECTION")
-
-	if a.IfExists {
-		builder.WriteString(" IF EXISTS")
-	}
-	builder.WriteString(" ")
-	builder.WriteString(a.ProjectionName.String())
-	if a.Partition != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(a.Partition.String())
-	}
-	return builder.String()
 }
 
 func (a *AlterTableMaterializeProjection) Accept(visitor ASTVisitor) error {
@@ -529,22 +387,6 @@ func (a *AlterTableMaterializeIndex) AlterType() string {
 	return "MATERIALIZE_INDEX"
 }
 
-func (a *AlterTableMaterializeIndex) String() string {
-	var builder strings.Builder
-	builder.WriteString("MATERIALIZE INDEX")
-
-	if a.IfExists {
-		builder.WriteString(" IF EXISTS")
-	}
-	builder.WriteString(" ")
-	builder.WriteString(a.IndexName.String())
-	if a.Partition != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(a.Partition.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableMaterializeIndex) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -577,16 +419,6 @@ func (a *AlterTableFreezePartition) AlterType() string {
 	return "FREEZE_PARTITION"
 }
 
-func (a *AlterTableFreezePartition) String() string {
-	var builder strings.Builder
-	builder.WriteString("FREEZE")
-	if a.Partition != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(a.Partition.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableFreezePartition) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -605,6 +437,7 @@ type AlterTableAddColumn struct {
 	Column      *ColumnDef
 	IfNotExists bool
 	After       *NestedIdentifier
+	Settings    *SettingsClause
 }
 
 func (a *AlterTableAddColumn) Pos() Pos {
@@ -612,25 +445,14 @@ func (a *AlterTableAddColumn) Pos() Pos {
 }
 
 func (a *AlterTableAddColumn) End() Pos {
+	if a.Settings != nil {
+		return a.Settings.End()
+	}
 	return a.StatementEnd
 }
 
 func (a *AlterTableAddColumn) AlterType() string {
 	return "ADD_COLUMN"
-}
-
-func (a *AlterTableAddColumn) String() string {
-	var builder strings.Builder
-	builder.WriteString("ADD COLUMN ")
-	builder.WriteString(a.Column.String())
-	if a.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	if a.After != nil {
-		builder.WriteString(" AFTER ")
-		builder.WriteString(a.After.String())
-	}
-	return builder.String()
 }
 
 func (a *AlterTableAddColumn) Accept(visitor ASTVisitor) error {
@@ -641,6 +463,11 @@ func (a *AlterTableAddColumn) Accept(visitor ASTVisitor) error {
 	}
 	if a.After != nil {
 		if err := a.After.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if a.Settings != nil {
+		if err := a.Settings.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -666,20 +493,6 @@ func (a *AlterTableAddIndex) End() Pos {
 
 func (a *AlterTableAddIndex) AlterType() string {
 	return "ADD_INDEX"
-}
-
-func (a *AlterTableAddIndex) String() string {
-	var builder strings.Builder
-	builder.WriteString("ADD ")
-	builder.WriteString(a.Index.String())
-	if a.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	if a.After != nil {
-		builder.WriteString(" AFTER ")
-		builder.WriteString(a.After.String())
-	}
-	return builder.String()
 }
 
 func (a *AlterTableAddIndex) Accept(visitor ASTVisitor) error {
@@ -709,13 +522,6 @@ func (p *ProjectionOrderByClause) End() Pos {
 	return p.Columns.End()
 }
 
-func (p *ProjectionOrderByClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("ORDER BY ")
-	builder.WriteString(p.Columns.String())
-	return builder.String()
-}
-
 func (p *ProjectionOrderByClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(p)
 	defer visitor.Leave(p)
@@ -738,27 +544,6 @@ func (p *ProjectionSelectStmt) Pos() Pos {
 
 func (p *ProjectionSelectStmt) End() Pos {
 	return p.RightParenPos
-}
-
-func (p *ProjectionSelectStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("(")
-	if p.With != nil {
-		builder.WriteString(p.With.String())
-		builder.WriteByte(' ')
-	}
-	builder.WriteString("SELECT ")
-	builder.WriteString(p.SelectColumns.String())
-	if p.GroupBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(p.GroupBy.String())
-	}
-	if p.OrderBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(p.OrderBy.String())
-	}
-	builder.WriteString(")")
-	return builder.String()
 }
 
 func (p *ProjectionSelectStmt) Accept(visitor ASTVisitor) error {
@@ -786,9 +571,10 @@ func (p *ProjectionSelectStmt) Accept(visitor ASTVisitor) error {
 }
 
 type TableProjection struct {
-	ProjectionPos Pos
-	Identifier    *NestedIdentifier
-	Select        *ProjectionSelectStmt
+	IncludeProjectionKeyword bool
+	ProjectionPos            Pos
+	Identifier               *NestedIdentifier
+	Select                   *ProjectionSelectStmt
 }
 
 func (t *TableProjection) Pos() Pos {
@@ -797,14 +583,6 @@ func (t *TableProjection) Pos() Pos {
 
 func (t *TableProjection) End() Pos {
 	return t.Select.End()
-}
-
-func (t *TableProjection) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Identifier.String())
-	builder.WriteString(" ")
-	builder.WriteString(t.Select.String())
-	return builder.String()
 }
 
 func (t *TableProjection) Accept(visitor ASTVisitor) error {
@@ -840,20 +618,6 @@ func (a *AlterTableAddProjection) AlterType() string {
 	return "ADD_PROJECTION"
 }
 
-func (a *AlterTableAddProjection) String() string {
-	var builder strings.Builder
-	builder.WriteString("ADD PROJECTION ")
-	if a.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(a.TableProjection.String())
-	if a.After != nil {
-		builder.WriteString(" AFTER ")
-		builder.WriteString(a.After.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableAddProjection) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -886,16 +650,6 @@ func (a *AlterTableDropColumn) AlterType() string {
 	return "DROP_COLUMN"
 }
 
-func (a *AlterTableDropColumn) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP COLUMN ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.ColumnName.String())
-	return builder.String()
-}
-
 func (a *AlterTableDropColumn) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -921,16 +675,6 @@ func (a *AlterTableDropIndex) End() Pos {
 
 func (a *AlterTableDropIndex) AlterType() string {
 	return "DROP_INDEX"
-}
-
-func (a *AlterTableDropIndex) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP INDEX ")
-	builder.WriteString(a.IndexName.String())
-	if a.IfExists {
-		builder.WriteString(" IF EXISTS")
-	}
-	return builder.String()
 }
 
 func (a *AlterTableDropIndex) Accept(visitor ASTVisitor) error {
@@ -960,16 +704,6 @@ func (a *AlterTableDropProjection) AlterType() string {
 	return "DROP_PROJECTION"
 }
 
-func (a *AlterTableDropProjection) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP PROJECTION ")
-	builder.WriteString(a.ProjectionName.String())
-	if a.IfExists {
-		builder.WriteString(" IF EXISTS")
-	}
-	return builder.String()
-}
-
 func (a *AlterTableDropProjection) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -994,10 +728,6 @@ func (a *AlterTableRemoveTTL) End() Pos {
 
 func (a *AlterTableRemoveTTL) AlterType() string {
 	return "REMOVE_TTL"
-}
-
-func (a *AlterTableRemoveTTL) String() string {
-	return "REMOVE TTL"
 }
 
 func (a *AlterTableRemoveTTL) Accept(visitor ASTVisitor) error {
@@ -1025,21 +755,6 @@ func (a *AlterTableClearColumn) End() Pos {
 
 func (a *AlterTableClearColumn) AlterType() string {
 	return "CLEAR_COLUMN"
-}
-
-func (a *AlterTableClearColumn) String() string {
-	var builder strings.Builder
-	builder.WriteString("CLEAR COLUMN ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.ColumnName.String())
-	if a.PartitionExpr != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(a.PartitionExpr.String())
-	}
-
-	return builder.String()
 }
 
 func (a *AlterTableClearColumn) Accept(visitor ASTVisitor) error {
@@ -1077,21 +792,6 @@ func (a *AlterTableClearIndex) AlterType() string {
 	return "CLEAR_INDEX"
 }
 
-func (a *AlterTableClearIndex) String() string {
-	var builder strings.Builder
-	builder.WriteString("CLEAR INDEX ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.IndexName.String())
-	if a.PartitionExpr != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(a.PartitionExpr.String())
-	}
-
-	return builder.String()
-}
-
 func (a *AlterTableClearIndex) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -1125,21 +825,6 @@ func (a *AlterTableClearProjection) End() Pos {
 
 func (a *AlterTableClearProjection) AlterType() string {
 	return "CLEAR_PROJECTION"
-}
-
-func (a *AlterTableClearProjection) String() string {
-	var builder strings.Builder
-	builder.WriteString("CLEAR PROJECTION ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.ProjectionName.String())
-	if a.PartitionExpr != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(a.PartitionExpr.String())
-	}
-
-	return builder.String()
 }
 
 func (a *AlterTableClearProjection) Accept(visitor ASTVisitor) error {
@@ -1176,18 +861,6 @@ func (a *AlterTableRenameColumn) AlterType() string {
 	return "RENAME_COLUMN"
 }
 
-func (a *AlterTableRenameColumn) String() string {
-	var builder strings.Builder
-	builder.WriteString("RENAME COLUMN ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.OldColumnName.String())
-	builder.WriteString(" TO ")
-	builder.WriteString(a.NewColumnName.String())
-	return builder.String()
-}
-
 func (a *AlterTableRenameColumn) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -1218,13 +891,6 @@ func (a *AlterTableModifyQuery) AlterType() string {
 	return "MODIFY_QUERY"
 }
 
-func (a *AlterTableModifyQuery) String() string {
-	var builder strings.Builder
-	builder.WriteString("MODIFY QUERY ")
-	builder.WriteString(a.SelectExpr.String())
-	return builder.String()
-}
-
 func (a *AlterTableModifyQuery) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -1237,7 +903,7 @@ func (a *AlterTableModifyQuery) Accept(visitor ASTVisitor) error {
 type AlterTableModifyTTL struct {
 	ModifyPos    Pos
 	StatementEnd Pos
-	TTL          *TTLExpr
+	TTL          *TTLClause
 }
 
 func (a *AlterTableModifyTTL) Pos() Pos {
@@ -1250,14 +916,6 @@ func (a *AlterTableModifyTTL) End() Pos {
 
 func (a *AlterTableModifyTTL) AlterType() string {
 	return "MODIFY_TTL"
-}
-
-func (a *AlterTableModifyTTL) String() string {
-	var builder strings.Builder
-	builder.WriteString("MODIFY ")
-	builder.WriteString("TTL ")
-	builder.WriteString(a.TTL.String())
-	return builder.String()
 }
 
 func (a *AlterTableModifyTTL) Accept(visitor ASTVisitor) error {
@@ -1290,19 +948,6 @@ func (a *AlterTableModifyColumn) AlterType() string {
 	return "MODIFY_COLUMN"
 }
 
-func (a *AlterTableModifyColumn) String() string {
-	var builder strings.Builder
-	builder.WriteString("MODIFY COLUMN ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(a.Column.String())
-	if a.RemovePropertyType != nil {
-		builder.WriteString(a.RemovePropertyType.String())
-	}
-	return builder.String()
-}
-
 func (a *AlterTableModifyColumn) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -1315,6 +960,64 @@ func (a *AlterTableModifyColumn) Accept(visitor ASTVisitor) error {
 		}
 	}
 	return visitor.VisitAlterTableModifyColumn(a)
+}
+
+type AlterTableModifySetting struct {
+	ModifyPos    Pos
+	StatementEnd Pos
+	Settings     []*SettingExpr
+}
+
+func (a *AlterTableModifySetting) Pos() Pos {
+	return a.ModifyPos
+}
+
+func (a *AlterTableModifySetting) End() Pos {
+	return a.StatementEnd
+}
+
+func (a *AlterTableModifySetting) AlterType() string {
+	return "MODIFY_SETTING"
+}
+
+func (a *AlterTableModifySetting) Accept(visitor ASTVisitor) error {
+	visitor.Enter(a)
+	defer visitor.Leave(a)
+	for _, setting := range a.Settings {
+		if err := setting.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitAlterTableModifySetting(a)
+}
+
+type AlterTableResetSetting struct {
+	ResetPos     Pos
+	StatementEnd Pos
+	Settings     []*Ident
+}
+
+func (a *AlterTableResetSetting) Pos() Pos {
+	return a.ResetPos
+}
+
+func (a *AlterTableResetSetting) End() Pos {
+	return a.StatementEnd
+}
+
+func (a *AlterTableResetSetting) AlterType() string {
+	return "RESET_SETTING"
+}
+
+func (a *AlterTableResetSetting) Accept(visitor ASTVisitor) error {
+	visitor.Enter(a)
+	defer visitor.Leave(a)
+	for _, setting := range a.Settings {
+		if err := setting.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitAlterTableResetSetting(a)
 }
 
 type AlterTableReplacePartition struct {
@@ -1335,15 +1038,6 @@ func (a *AlterTableReplacePartition) AlterType() string {
 	return "REPLACE_PARTITION"
 }
 
-func (a *AlterTableReplacePartition) String() string {
-	var builder strings.Builder
-	builder.WriteString("REPLACE ")
-	builder.WriteString(a.Partition.String())
-	builder.WriteString(" FROM ")
-	builder.WriteString(a.Table.String())
-	return builder.String()
-}
-
 func (a *AlterTableReplacePartition) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -1354,6 +1048,98 @@ func (a *AlterTableReplacePartition) Accept(visitor ASTVisitor) error {
 		return err
 	}
 	return visitor.VisitAlterTableReplacePartition(a)
+}
+
+type AlterTableDelete struct {
+	DeletePos    Pos
+	StatementEnd Pos
+	WhereClause  Expr
+}
+
+func (a *AlterTableDelete) Pos() Pos {
+	return a.DeletePos
+}
+
+func (a *AlterTableDelete) End() Pos {
+	return a.StatementEnd
+}
+
+func (a *AlterTableDelete) AlterType() string {
+	return "DELETE"
+}
+
+func (a *AlterTableDelete) Accept(visitor ASTVisitor) error {
+	visitor.Enter(a)
+	defer visitor.Leave(a)
+	if err := a.WhereClause.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitAlterTableDelete(a)
+}
+
+type AlterTableUpdate struct {
+	UpdatePos    Pos
+	StatementEnd Pos
+	Assignments  []*UpdateAssignment
+	InPartition  *PartitionClause
+	WhereClause  Expr
+}
+
+func (a *AlterTableUpdate) Pos() Pos {
+	return a.UpdatePos
+}
+
+func (a *AlterTableUpdate) End() Pos {
+	return a.StatementEnd
+}
+
+func (a *AlterTableUpdate) AlterType() string {
+	return "UPDATE"
+}
+
+func (a *AlterTableUpdate) Accept(visitor ASTVisitor) error {
+	visitor.Enter(a)
+	defer visitor.Leave(a)
+	for _, assignment := range a.Assignments {
+		if err := assignment.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if a.InPartition != nil {
+		if err := a.InPartition.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if err := a.WhereClause.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitAlterTableUpdate(a)
+}
+
+type UpdateAssignment struct {
+	AssignmentPos Pos
+	Column        *NestedIdentifier
+	Expr          Expr
+}
+
+func (u *UpdateAssignment) Pos() Pos {
+	return u.AssignmentPos
+}
+
+func (u *UpdateAssignment) End() Pos {
+	return u.Expr.End()
+}
+
+func (u *UpdateAssignment) Accept(visitor ASTVisitor) error {
+	visitor.Enter(u)
+	defer visitor.Leave(u)
+	if err := u.Column.Accept(visitor); err != nil {
+		return err
+	}
+	if err := u.Expr.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitUpdateAssignment(u)
 }
 
 type RemovePropertyType struct {
@@ -1368,13 +1154,6 @@ func (a *RemovePropertyType) Pos() Pos {
 
 func (a *RemovePropertyType) End() Pos {
 	return a.PropertyType.End()
-}
-
-func (a *RemovePropertyType) String() string {
-	var builder strings.Builder
-	builder.WriteString(" REMOVE ")
-	builder.WriteString(a.PropertyType.String())
-	return builder.String()
 }
 
 func (a *RemovePropertyType) Accept(visitor ASTVisitor) error {
@@ -1401,28 +1180,6 @@ func (a *TableIndex) Pos() Pos {
 
 func (a *TableIndex) End() Pos {
 	return a.Granularity.End()
-}
-
-func (a *TableIndex) String() string {
-	var builder strings.Builder
-	builder.WriteString("INDEX")
-	builder.WriteByte(' ')
-	builder.WriteString(a.Name.String())
-	// a.ColumnDef = *Name --- e.g. INDEX idx column TYPE ...
-	// a.ColumnDef = *ParamExprList --- e.g. INDEX idx(column) TYPE ...
-	if _, ok := a.ColumnExpr.Expr.(*Ident); ok {
-		builder.WriteByte(' ')
-	}
-	builder.WriteString(a.ColumnExpr.String())
-	builder.WriteByte(' ')
-	builder.WriteString("TYPE")
-	builder.WriteByte(' ')
-	builder.WriteString(a.ColumnType.String())
-	builder.WriteByte(' ')
-	builder.WriteString("GRANULARITY")
-	builder.WriteByte(' ')
-	builder.WriteString(a.Granularity.String())
-	return builder.String()
 }
 
 func (a *TableIndex) Accept(visitor ASTVisitor) error {
@@ -1458,15 +1215,6 @@ func (i *Ident) End() Pos {
 	return i.NameEnd
 }
 
-func (i *Ident) String() string {
-	if i.QuoteType == BackTicks {
-		return "`" + i.Name + "`"
-	} else if i.QuoteType == DoubleQuote {
-		return `"` + i.Name + `"`
-	}
-	return i.Name
-}
-
 func (i *Ident) Accept(visitor ASTVisitor) error {
 	visitor.Enter(i)
 	defer visitor.Leave(i)
@@ -1483,10 +1231,6 @@ func (u *UUID) Pos() Pos {
 
 func (u *UUID) End() Pos {
 	return u.Value.LiteralEnd
-}
-
-func (u *UUID) String() string {
-	return "UUID " + u.Value.String()
 }
 
 func (u *UUID) Accept(visitor ASTVisitor) error {
@@ -1517,28 +1261,6 @@ func (c *CreateDatabase) Type() string {
 	return "DATABASE"
 }
 
-func (c *CreateDatabase) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE DATABASE ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.Name.String())
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-	if c.Engine != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Engine.String())
-	}
-	if c.Comment != nil {
-		builder.WriteString(" COMMENT ")
-		builder.WriteString(c.Comment.String())
-	}
-	return builder.String()
-}
-
 func (c *CreateDatabase) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -1556,18 +1278,19 @@ func (c *CreateDatabase) Accept(visitor ASTVisitor) error {
 }
 
 type CreateTable struct {
-	CreatePos    Pos // position of CREATE|ATTACH keyword
-	StatementEnd Pos
-	OrReplace    bool
-	Name         *TableIdentifier
-	IfNotExists  bool
-	UUID         *UUID
-	OnCluster    *ClusterClause
-	TableSchema  *TableSchemaClause
-	Engine       *EngineExpr
-	SubQuery     *SubQuery
-	HasTemporary bool
-	Comment      *StringLiteral
+	CreatePos     Pos // position of CREATE|ATTACH keyword
+	StatementEnd  Pos
+	OrReplace     bool
+	Name          *TableIdentifier
+	IfNotExists   bool
+	UUID          *UUID
+	OnCluster     *ClusterClause
+	TableSchema   *TableSchemaClause
+	Engine        *EngineExpr
+	SubQuery      *SubQuery
+	TableFunction *TableFunctionExpr
+	HasTemporary  bool
+	Comment       *StringLiteral
 }
 
 func (c *CreateTable) Pos() Pos {
@@ -1580,46 +1303,6 @@ func (c *CreateTable) End() Pos {
 
 func (c *CreateTable) Type() string {
 	return "CREATE TABLE"
-}
-
-func (c *CreateTable) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE")
-	if c.OrReplace {
-		builder.WriteString(" OR REPLACE")
-	}
-	if c.HasTemporary {
-		builder.WriteString(" TEMPORARY")
-	}
-	builder.WriteString(" TABLE ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.Name.String())
-	if c.UUID != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.UUID.String())
-	}
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-	if c.TableSchema != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.TableSchema.String())
-	}
-	if c.Engine != nil {
-		builder.WriteString(c.Engine.String())
-	}
-	if c.SubQuery != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(c.SubQuery.String())
-	}
-	if c.Comment != nil {
-		builder.WriteString(" COMMENT ")
-		builder.WriteString(c.Comment.String())
-	}
-	return builder.String()
 }
 
 func (c *CreateTable) Accept(visitor ASTVisitor) error {
@@ -1650,6 +1333,11 @@ func (c *CreateTable) Accept(visitor ASTVisitor) error {
 	}
 	if c.SubQuery != nil {
 		if err := c.SubQuery.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.TableFunction != nil {
+		if err := c.TableFunction.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -1687,77 +1375,6 @@ func (c *CreateMaterializedView) End() Pos {
 
 func (c *CreateMaterializedView) Type() string {
 	return "MATERIALIZED_VIEW"
-}
-
-func (c *CreateMaterializedView) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE MATERIALIZED VIEW ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.Name.String())
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-	if c.Refresh != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Refresh.String())
-	}
-	if c.RandomizeFor != nil {
-		builder.WriteString(" RANDOMIZE FOR ")
-		builder.WriteString(c.RandomizeFor.String())
-	}
-	if c.DependsOn != nil {
-		builder.WriteString(" DEPENDS ON ")
-		for i, dep := range c.DependsOn {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(dep.String())
-		}
-	}
-	if c.Settings != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Settings.String())
-	}
-	if c.HasAppend {
-		builder.WriteString(" APPEND")
-	}
-	if c.Engine != nil {
-		builder.WriteString(c.Engine.String())
-	}
-	if c.Destination != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Destination.String())
-		if c.Destination.TableSchema != nil {
-			builder.WriteString(" ")
-			builder.WriteString(c.Destination.TableSchema.String())
-		}
-	}
-	if c.HasEmpty {
-		builder.WriteString(" EMPTY")
-	}
-	if c.Definer != nil {
-		builder.WriteString(" DEFINER = ")
-		builder.WriteString(c.Definer.String())
-	}
-	if c.SQLSecurity != "" {
-		builder.WriteString(" SQL SECURITY ")
-		builder.WriteString(c.SQLSecurity)
-	}
-	if c.Populate {
-		builder.WriteString(" POPULATE")
-	}
-	if c.SubQuery != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(c.SubQuery.String())
-	}
-	if c.Comment != nil {
-		builder.WriteString(" COMMENT ")
-		builder.WriteString(c.Comment.String())
-	}
-	return builder.String()
 }
 
 func (c *CreateMaterializedView) Accept(visitor ASTVisitor) error {
@@ -1835,6 +1452,7 @@ type CreateView struct {
 	UUID         *UUID
 	OnCluster    *ClusterClause
 	TableSchema  *TableSchemaClause
+	Comment      *StringLiteral
 	SubQuery     *SubQuery
 }
 
@@ -1848,39 +1466,6 @@ func (c *CreateView) End() Pos {
 
 func (c *CreateView) Type() string {
 	return "VIEW"
-}
-
-func (c *CreateView) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE")
-	if c.OrReplace {
-		builder.WriteString(" OR REPLACE")
-	}
-	builder.WriteString(" VIEW ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.Name.String())
-	if c.UUID != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.UUID.String())
-	}
-
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-
-	if c.TableSchema != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.TableSchema.String())
-	}
-
-	if c.SubQuery != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(c.SubQuery.String())
-	}
-	return builder.String()
 }
 
 func (c *CreateView) Accept(visitor ASTVisitor) error {
@@ -1901,6 +1486,11 @@ func (c *CreateView) Accept(visitor ASTVisitor) error {
 	}
 	if c.TableSchema != nil {
 		if err := c.TableSchema.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.Comment != nil {
+		if err := c.Comment.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -1932,28 +1522,6 @@ func (c *CreateFunction) Pos() Pos {
 
 func (c *CreateFunction) End() Pos {
 	return c.Expr.End()
-}
-
-func (c *CreateFunction) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE")
-	if c.OrReplace {
-		builder.WriteString(" OR REPLACE")
-	}
-	builder.WriteString(" FUNCTION ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.FunctionName.String())
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-	builder.WriteString(" AS ")
-	builder.WriteString(c.Params.String())
-	builder.WriteString(" -> ")
-	builder.WriteString(c.Expr.String())
-	return builder.String()
 }
 
 func (c *CreateFunction) Accept(visitor ASTVisitor) error {
@@ -1996,20 +1564,6 @@ func (r *RoleName) End() Pos {
 	return r.Name.End()
 }
 
-func (r *RoleName) String() string {
-	var builder strings.Builder
-	builder.WriteString(r.Name.String())
-	if r.Scope != nil {
-		builder.WriteString("@")
-		builder.WriteString(r.Scope.String())
-	}
-	if r.OnCluster != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(r.OnCluster.String())
-	}
-	return builder.String()
-}
-
 func (r *RoleName) Accept(visitor ASTVisitor) error {
 	visitor.Enter(r)
 	defer visitor.Leave(r)
@@ -2043,20 +1597,6 @@ func (s *SettingPair) End() Pos {
 	return s.Value.End()
 }
 
-func (s *SettingPair) String() string {
-	var builder strings.Builder
-	builder.WriteString(s.Name.String())
-	if s.Value != nil {
-		if s.Operation == TokenKindSingleEQ {
-			builder.WriteString(string(s.Operation))
-		} else {
-			builder.WriteByte(' ')
-		}
-		builder.WriteString(s.Value.String())
-	}
-	return builder.String()
-}
-
 func (s *SettingPair) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -2088,23 +1628,6 @@ func (r *RoleSetting) End() Pos {
 		return r.Modifier.NameEnd
 	}
 	return r.SettingPairs[len(r.SettingPairs)-1].End()
-}
-
-func (r *RoleSetting) String() string {
-	var builder strings.Builder
-	for i, settingPair := range r.SettingPairs {
-		if i > 0 {
-			builder.WriteString(" ")
-		}
-		builder.WriteString(settingPair.String())
-	}
-	if r.Modifier != nil {
-		if len(r.SettingPairs) > 0 {
-			builder.WriteString(" ")
-		}
-		builder.WriteString(r.Modifier.String())
-	}
-	return builder.String()
 }
 
 func (r *RoleSetting) Accept(visitor ASTVisitor) error {
@@ -2143,37 +1666,6 @@ func (c *CreateRole) End() Pos {
 
 func (c *CreateRole) Type() string {
 	return "ROLE"
-}
-
-func (c *CreateRole) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE ROLE ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	if c.OrReplace {
-		builder.WriteString("OR REPLACE ")
-	}
-	for i, roleName := range c.RoleNames {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(roleName.String())
-	}
-	if c.AccessStorageType != nil {
-		builder.WriteString(" IN ")
-		builder.WriteString(c.AccessStorageType.String())
-	}
-	if len(c.Settings) > 0 {
-		builder.WriteString(" SETTINGS ")
-		for i, setting := range c.Settings {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(setting.String())
-		}
-	}
-	return builder.String()
 }
 
 func (c *CreateRole) Accept(visitor ASTVisitor) error {
@@ -2216,35 +1708,6 @@ func (a *AuthenticationClause) End() Pos {
 	return a.AuthEnd
 }
 
-func (a *AuthenticationClause) String() string {
-	var builder strings.Builder
-	if a.NotIdentified {
-		builder.WriteString("NOT IDENTIFIED")
-		return builder.String()
-	}
-	builder.WriteString("IDENTIFIED")
-	if a.AuthType != "" {
-		builder.WriteString(" WITH ")
-		builder.WriteString(a.AuthType)
-	}
-	if a.AuthValue != nil {
-		builder.WriteString(" BY ")
-		builder.WriteString(a.AuthValue.String())
-	}
-	if a.LdapServer != nil {
-		builder.WriteString(" WITH ldap SERVER ")
-		builder.WriteString(a.LdapServer.String())
-	}
-	if a.IsKerberos {
-		builder.WriteString(" WITH kerberos")
-		if a.KerberosRealm != nil && a.KerberosRealm.Literal != "" {
-			builder.WriteString(" REALM ")
-			builder.WriteString(a.KerberosRealm.String())
-		}
-	}
-	return builder.String()
-}
-
 func (a *AuthenticationClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -2281,17 +1744,6 @@ func (h *HostClause) End() Pos {
 	return h.HostEnd
 }
 
-func (h *HostClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("HOST ")
-	builder.WriteString(h.HostType)
-	if h.HostValue != nil {
-		builder.WriteString(" ")
-		builder.WriteString(h.HostValue.String())
-	}
-	return builder.String()
-}
-
 func (h *HostClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(h)
 	defer visitor.Leave(h)
@@ -2316,22 +1768,6 @@ func (d *DefaultRoleClause) Pos() Pos {
 
 func (d *DefaultRoleClause) End() Pos {
 	return d.DefaultEnd
-}
-
-func (d *DefaultRoleClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("DEFAULT ROLE ")
-	if d.None {
-		builder.WriteString("NONE")
-	} else {
-		for i, role := range d.Roles {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(role.String())
-		}
-	}
-	return builder.String()
 }
 
 func (d *DefaultRoleClause) Accept(visitor ASTVisitor) error {
@@ -2362,33 +1798,6 @@ func (g *GranteesClause) End() Pos {
 	return g.GranteesEnd
 }
 
-func (g *GranteesClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("GRANTEES ")
-	if g.Any {
-		builder.WriteString("ANY")
-	} else if g.None {
-		builder.WriteString("NONE")
-	} else {
-		for i, grantee := range g.Grantees {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(grantee.String())
-		}
-	}
-	if len(g.ExceptUsers) > 0 {
-		builder.WriteString(" EXCEPT ")
-		for i, except := range g.ExceptUsers {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(except.String())
-		}
-	}
-	return builder.String()
-}
-
 func (g *GranteesClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(g)
 	defer visitor.Leave(g)
@@ -2412,6 +1821,7 @@ type CreateUser struct {
 	OrReplace       bool
 	UserNames       []*RoleName
 	Authentication  *AuthenticationClause
+	ValidUntil      *StringLiteral
 	Hosts           []*HostClause
 	DefaultRole     *DefaultRoleClause
 	DefaultDatabase *Ident
@@ -2432,60 +1842,6 @@ func (c *CreateUser) Type() string {
 	return "USER"
 }
 
-func (c *CreateUser) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE USER ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	if c.OrReplace {
-		builder.WriteString("OR REPLACE ")
-	}
-	for i, userName := range c.UserNames {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(userName.String())
-	}
-	if c.Authentication != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Authentication.String())
-	}
-	if len(c.Hosts) > 0 {
-		builder.WriteString(" ")
-		for i, host := range c.Hosts {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(host.String())
-		}
-	}
-	if c.DefaultRole != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.DefaultRole.String())
-	}
-	if c.DefaultDatabase != nil {
-		builder.WriteString(" DEFAULT DATABASE ")
-		builder.WriteString(c.DefaultDatabase.String())
-	} else if c.DefaultDbNone {
-		builder.WriteString(" DEFAULT DATABASE NONE")
-	}
-	if c.Grantees != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Grantees.String())
-	}
-	if len(c.Settings) > 0 {
-		builder.WriteString(" SETTINGS ")
-		for i, setting := range c.Settings {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(setting.String())
-		}
-	}
-	return builder.String()
-}
-
 func (c *CreateUser) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -2496,6 +1852,11 @@ func (c *CreateUser) Accept(visitor ASTVisitor) error {
 	}
 	if c.Authentication != nil {
 		if err := c.Authentication.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.ValidUntil != nil {
+		if err := c.ValidUntil.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -2547,30 +1908,6 @@ func (a *AlterRole) Type() string {
 	return "ROLE"
 }
 
-func (a *AlterRole) String() string {
-	var builder strings.Builder
-	builder.WriteString("ALTER ROLE ")
-	if a.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	for i, roleRenamePair := range a.RoleRenamePairs {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(roleRenamePair.String())
-	}
-	if len(a.Settings) > 0 {
-		builder.WriteString(" SETTINGS ")
-		for i, setting := range a.Settings {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(setting.String())
-		}
-	}
-	return builder.String()
-}
-
 func (a *AlterRole) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -2601,16 +1938,6 @@ func (r *RoleRenamePair) End() Pos {
 	return r.StatementEnd
 }
 
-func (r *RoleRenamePair) String() string {
-	var builder strings.Builder
-	builder.WriteString(r.RoleName.String())
-	if r.NewName != nil {
-		builder.WriteString(" RENAME TO ")
-		builder.WriteString(r.NewName.String())
-	}
-	return builder.String()
-}
-
 func (r *RoleRenamePair) Accept(visitor ASTVisitor) error {
 	visitor.Enter(r)
 	defer visitor.Leave(r)
@@ -2639,13 +1966,6 @@ func (d *DestinationClause) End() Pos {
 	return d.TableIdentifier.End()
 }
 
-func (d *DestinationClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("TO ")
-	builder.WriteString(d.TableIdentifier.String())
-	return builder.String()
-}
-
 func (d *DestinationClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(d)
 	defer visitor.Leave(d)
@@ -2667,14 +1987,6 @@ func (c *ConstraintClause) Pos() Pos {
 
 func (c *ConstraintClause) End() Pos {
 	return c.Expr.End()
-}
-
-func (c *ConstraintClause) String() string {
-	var builder strings.Builder
-	builder.WriteString(c.Constraint.String())
-	builder.WriteByte(' ')
-	builder.WriteString(c.Expr.String())
-	return builder.String()
 }
 
 func (c *ConstraintClause) Accept(visitor ASTVisitor) error {
@@ -2701,10 +2013,6 @@ func (n *NullLiteral) End() Pos {
 	return n.NullPos + 4
 }
 
-func (n *NullLiteral) String() string {
-	return "NULL"
-}
-
 func (n *NullLiteral) Accept(visitor ASTVisitor) error {
 	visitor.Enter(n)
 	defer visitor.Leave(n)
@@ -2722,10 +2030,6 @@ func (n *NotNullLiteral) Pos() Pos {
 
 func (n *NotNullLiteral) End() Pos {
 	return n.NullLiteral.End()
-}
-
-func (n *NotNullLiteral) String() string {
-	return "NOT NULL"
 }
 
 func (n *NotNullLiteral) Accept(visitor ASTVisitor) error {
@@ -2753,13 +2057,6 @@ func (n *NestedIdentifier) End() Pos {
 	return n.Ident.End()
 }
 
-func (n *NestedIdentifier) String() string {
-	if n.DotIdent != nil {
-		return n.Ident.String() + "." + n.DotIdent.String()
-	}
-	return n.Ident.String()
-}
-
 func (n *NestedIdentifier) Accept(visitor ASTVisitor) error {
 	visitor.Enter(n)
 	defer visitor.Leave(n)
@@ -2774,53 +2071,33 @@ func (n *NestedIdentifier) Accept(visitor ASTVisitor) error {
 	return visitor.VisitNestedIdentifier(n)
 }
 
-type ColumnIdentifier struct {
-	Database *Ident
-	Table    *Ident
-	Column   *Ident
+type Path struct {
+	Fields []*Ident
 }
 
-func (c *ColumnIdentifier) Pos() Pos {
-	if c.Database != nil {
-		return c.Database.NamePos
-	} else if c.Table != nil {
-		return c.Table.NamePos
-	} else {
-		return c.Column.NamePos
+func (p *Path) Pos() Pos {
+	if len(p.Fields) > 0 {
+		return p.Fields[0].Pos()
 	}
+	return 0
 }
 
-func (c *ColumnIdentifier) End() Pos {
-	return c.Column.NameEnd
-}
-
-func (c *ColumnIdentifier) String() string {
-	if c.Database != nil {
-		return c.Database.String() + "." + c.Table.String() + "." + c.Column.String()
-	} else if c.Table != nil {
-		return c.Table.String() + "." + c.Column.String()
-	} else {
-		return c.Column.String()
+func (p *Path) End() Pos {
+	if len(p.Fields) > 0 {
+		return p.Fields[len(p.Fields)-1].End()
 	}
+	return 0
 }
 
-func (c *ColumnIdentifier) Accept(visitor ASTVisitor) error {
-	visitor.Enter(c)
-	defer visitor.Leave(c)
-	if c.Database != nil {
-		if err := c.Database.Accept(visitor); err != nil {
+func (p *Path) Accept(visitor ASTVisitor) error {
+	visitor.Enter(p)
+	defer visitor.Leave(p)
+	for _, ident := range p.Fields {
+		if err := ident.Accept(visitor); err != nil {
 			return err
 		}
 	}
-	if c.Table != nil {
-		if err := c.Table.Accept(visitor); err != nil {
-			return err
-		}
-	}
-	if err := c.Column.Accept(visitor); err != nil {
-		return err
-	}
-	return visitor.VisitColumnIdentifier(c)
+	return visitor.VisitPath(p)
 }
 
 type TableIdentifier struct {
@@ -2837,13 +2114,6 @@ func (t *TableIdentifier) Pos() Pos {
 
 func (t *TableIdentifier) End() Pos {
 	return t.Table.End()
-}
-
-func (t *TableIdentifier) String() string {
-	if t.Database != nil {
-		return t.Database.String() + "." + t.Table.String()
-	}
-	return t.Table.String()
 }
 
 func (t *TableIdentifier) Accept(visitor ASTVisitor) error {
@@ -2874,29 +2144,6 @@ func (t *TableSchemaClause) Pos() Pos {
 
 func (t *TableSchemaClause) End() Pos {
 	return t.SchemaEnd
-}
-
-func (t *TableSchemaClause) String() string {
-	var builder strings.Builder
-	if len(t.Columns) > 0 {
-		builder.WriteString("(")
-		for i, column := range t.Columns {
-			if i > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(column.String())
-		}
-		builder.WriteByte(')')
-	}
-	if t.AliasTable != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(t.AliasTable.String())
-	}
-	if t.TableFunction != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(t.TableFunction.String())
-	}
-	return builder.String()
 }
 
 func (t *TableSchemaClause) Accept(visitor ASTVisitor) error {
@@ -2934,19 +2181,6 @@ func (t *TableArgListExpr) End() Pos {
 	return t.RightParenPos
 }
 
-func (t *TableArgListExpr) String() string {
-	var builder strings.Builder
-	builder.WriteByte('(')
-	for i, arg := range t.Args {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(arg.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (t *TableArgListExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -2969,13 +2203,6 @@ func (t *TableFunctionExpr) Pos() Pos {
 
 func (t *TableFunctionExpr) End() Pos {
 	return t.Args.End()
-}
-
-func (t *TableFunctionExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Name.String())
-	builder.WriteString(t.Args.String())
-	return builder.String()
 }
 
 func (t *TableFunctionExpr) Accept(visitor ASTVisitor) error {
@@ -3003,13 +2230,6 @@ func (o *ClusterClause) End() Pos {
 	return o.Expr.End()
 }
 
-func (o *ClusterClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("ON CLUSTER ")
-	builder.WriteString(o.Expr.String())
-	return builder.String()
-}
-
 func (o *ClusterClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(o)
 	defer visitor.Leave(o)
@@ -3035,19 +2255,6 @@ func (p *PartitionClause) End() Pos {
 		return p.ID.LiteralEnd
 	}
 	return p.Expr.End()
-}
-
-func (p *PartitionClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("PARTITION ")
-	if p.ID != nil {
-		builder.WriteString(p.ID.String())
-	} else if p.All {
-		builder.WriteString("ALL")
-	} else {
-		builder.WriteString(p.Expr.String())
-	}
-	return builder.String()
 }
 
 func (p *PartitionClause) Accept(visitor ASTVisitor) error {
@@ -3079,13 +2286,6 @@ func (p *PartitionByClause) End() Pos {
 	return p.Expr.End()
 }
 
-func (p *PartitionByClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("PARTITION BY ")
-	builder.WriteString(p.Expr.String())
-	return builder.String()
-}
-
 func (p *PartitionByClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(p)
 	defer visitor.Leave(p)
@@ -3108,13 +2308,6 @@ func (p *PrimaryKeyClause) End() Pos {
 	return p.Expr.End()
 }
 
-func (p *PrimaryKeyClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("PRIMARY KEY ")
-	builder.WriteString(p.Expr.String())
-	return builder.String()
-}
-
 func (p *PrimaryKeyClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(p)
 	defer visitor.Leave(p)
@@ -3135,13 +2328,6 @@ func (s *SampleByClause) Pos() Pos {
 
 func (s *SampleByClause) End() Pos {
 	return s.Expr.End()
-}
-
-func (s *SampleByClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("SAMPLE BY ")
-	builder.WriteString(s.Expr.String())
-	return builder.String()
 }
 
 func (s *SampleByClause) Accept(visitor ASTVisitor) error {
@@ -3171,16 +2357,6 @@ func (t *TTLPolicyRuleAction) End() Pos {
 	return t.ActionEnd
 }
 
-func (t *TTLPolicyRuleAction) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Action)
-	if t.Codec != nil {
-		builder.WriteString(" ")
-		builder.WriteString(t.Codec.String())
-	}
-	return builder.String()
-}
-
 func (t *TTLPolicyRuleAction) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -3208,21 +2384,6 @@ func (r *RefreshExpr) End() Pos {
 		return r.Offset.End()
 	}
 	return r.Interval.End()
-}
-
-func (r *RefreshExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("REFRESH ")
-	builder.WriteString(r.Frequency)
-	if r.Interval != nil {
-		builder.WriteString(" ")
-		builder.WriteString(r.Interval.String())
-	}
-	if r.Offset != nil {
-		builder.WriteString(" OFFSET ")
-		builder.WriteString(r.Offset.String())
-	}
-	return builder.String()
 }
 
 func (r *RefreshExpr) Accept(visitor ASTVisitor) error {
@@ -3260,20 +2421,6 @@ func (t *TTLPolicyRule) End() Pos {
 		return t.ToDisk.LiteralEnd
 	}
 	return t.ToVolume.LiteralEnd
-}
-
-func (t *TTLPolicyRule) String() string {
-	var builder strings.Builder
-	if t.ToVolume != nil {
-		builder.WriteString("TO VOLUME ")
-		builder.WriteString(t.ToVolume.String())
-	} else if t.ToDisk != nil {
-		builder.WriteString("TO DISK ")
-		builder.WriteString(t.ToDisk.String())
-	} else if t.Action != nil {
-		builder.WriteString(t.Action.String())
-	}
-	return builder.String()
 }
 
 func (t *TTLPolicyRule) Accept(visitor ASTVisitor) error {
@@ -3318,23 +2465,6 @@ func (t *TTLPolicy) End() Pos {
 	return t.Item.End()
 }
 
-func (t *TTLPolicy) String() string {
-	var builder strings.Builder
-
-	if t.Item != nil {
-		builder.WriteString(t.Item.String())
-	}
-	if t.Where != nil {
-		builder.WriteString(" ")
-		builder.WriteString(t.Where.String())
-	}
-	if t.GroupBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(t.GroupBy.String())
-	}
-	return builder.String()
-}
-
 func (t *TTLPolicy) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -3370,16 +2500,6 @@ func (t *TTLExpr) End() Pos {
 	return t.Expr.End()
 }
 
-func (t *TTLExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Expr.String())
-	if t.Policy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(t.Policy.String())
-	}
-	return builder.String()
-}
-
 func (t *TTLExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -3408,18 +2528,6 @@ func (t *TTLClause) End() Pos {
 	return t.ListEnd
 }
 
-func (t *TTLClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("TTL ")
-	for i, item := range t.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	return builder.String()
-}
-
 func (t *TTLClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -3431,11 +2539,66 @@ func (t *TTLClause) Accept(visitor ASTVisitor) error {
 	return visitor.VisitTTLExprList(t)
 }
 
+type Fill struct {
+	FillPos   Pos
+	From      Expr // optional
+	To        Expr // optional
+	Step      Expr // optional
+	Staleness Expr // optional
+}
+
+func (f *Fill) Pos() Pos {
+	return f.FillPos
+}
+
+func (f *Fill) End() Pos {
+	if f.Staleness != nil {
+		return f.Staleness.End()
+	}
+	if f.Step != nil {
+		return f.Step.End()
+	}
+	if f.To != nil {
+		return f.To.End()
+	}
+	if f.From != nil {
+		return f.From.End()
+	}
+	return f.FillPos + Pos(len("FILL"))
+}
+
+func (f *Fill) Accept(visitor ASTVisitor) error {
+	visitor.Enter(f)
+	defer visitor.Leave(f)
+	if f.From != nil {
+		if err := f.From.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if f.To != nil {
+		if err := f.To.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if f.Step != nil {
+		if err := f.Step.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if f.Staleness != nil {
+		if err := f.Staleness.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitFill(f)
+}
+
 type OrderExpr struct {
 	OrderPos  Pos
 	Expr      Expr
 	Alias     *Ident
 	Direction OrderDirection
+	Fill      *Fill // optional WITH FILL clause
 }
 
 func (o *OrderExpr) Pos() Pos {
@@ -3443,24 +2606,13 @@ func (o *OrderExpr) Pos() Pos {
 }
 
 func (o *OrderExpr) End() Pos {
+	if o.Fill != nil {
+		return o.Fill.End()
+	}
 	if o.Alias != nil {
 		return o.Alias.End()
 	}
 	return o.Expr.End()
-}
-
-func (o *OrderExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(o.Expr.String())
-	if o.Alias != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(o.Alias.String())
-	}
-	if o.Direction != OrderDirectionNone {
-		builder.WriteByte(' ')
-		builder.WriteString(string(o.Direction))
-	}
-	return builder.String()
 }
 
 func (o *OrderExpr) Accept(visitor ASTVisitor) error {
@@ -3474,13 +2626,74 @@ func (o *OrderExpr) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
+	if o.Fill != nil {
+		if err := o.Fill.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitOrderByExpr(o)
 }
 
+type InterpolateItem struct {
+	Column *Ident
+	Expr   Expr // optional AS expression
+}
+
+func (i *InterpolateItem) Pos() Pos {
+	return i.Column.Pos()
+}
+
+func (i *InterpolateItem) End() Pos {
+	if i.Expr != nil {
+		return i.Expr.End()
+	}
+	return i.Column.End()
+}
+
+func (i *InterpolateItem) Accept(visitor ASTVisitor) error {
+	visitor.Enter(i)
+	defer visitor.Leave(i)
+	if err := i.Column.Accept(visitor); err != nil {
+		return err
+	}
+	if i.Expr != nil {
+		if err := i.Expr.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitInterpolateItem(i)
+}
+
+type InterpolateClause struct {
+	InterpolatePos Pos
+	ListEnd        Pos
+	Items          []*InterpolateItem // can be nil for INTERPOLATE without columns
+}
+
+func (i *InterpolateClause) Pos() Pos {
+	return i.InterpolatePos
+}
+
+func (i *InterpolateClause) End() Pos {
+	return i.ListEnd
+}
+
+func (i *InterpolateClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(i)
+	defer visitor.Leave(i)
+	for _, item := range i.Items {
+		if err := item.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitInterpolateClause(i)
+}
+
 type OrderByClause struct {
-	OrderPos Pos
-	ListEnd  Pos
-	Items    []Expr
+	OrderPos    Pos
+	ListEnd     Pos
+	Items       []Expr
+	Interpolate *InterpolateClause // optional INTERPOLATE clause
 }
 
 func (o *OrderByClause) Pos() Pos {
@@ -3488,20 +2701,10 @@ func (o *OrderByClause) Pos() Pos {
 }
 
 func (o *OrderByClause) End() Pos {
-	return o.ListEnd
-}
-
-func (o *OrderByClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("ORDER BY ")
-	for i, item := range o.Items {
-		builder.WriteString(item.String())
-		if i != len(o.Items)-1 {
-			builder.WriteByte(',')
-			builder.WriteByte(' ')
-		}
+	if o.Interpolate != nil {
+		return o.Interpolate.End()
 	}
-	return builder.String()
+	return o.ListEnd
 }
 
 func (o *OrderByClause) Accept(visitor ASTVisitor) error {
@@ -3512,32 +2715,29 @@ func (o *OrderByClause) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
+	if o.Interpolate != nil {
+		if err := o.Interpolate.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitOrderByListExpr(o)
 }
 
-type SettingExprList struct {
+type SettingExpr struct {
 	SettingsPos Pos
 	Name        *Ident
 	Expr        Expr
 }
 
-func (s *SettingExprList) Pos() Pos {
+func (s *SettingExpr) Pos() Pos {
 	return s.SettingsPos
 }
 
-func (s *SettingExprList) End() Pos {
+func (s *SettingExpr) End() Pos {
 	return s.Expr.End()
 }
 
-func (s *SettingExprList) String() string {
-	var builder strings.Builder
-	builder.WriteString(s.Name.String())
-	builder.WriteByte('=')
-	builder.WriteString(s.Expr.String())
-	return builder.String()
-}
-
-func (s *SettingExprList) Accept(visitor ASTVisitor) error {
+func (s *SettingExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
 	if err := s.Name.Accept(visitor); err != nil {
@@ -3552,7 +2752,7 @@ func (s *SettingExprList) Accept(visitor ASTVisitor) error {
 type SettingsClause struct {
 	SettingsPos Pos
 	ListEnd     Pos
-	Items       []*SettingExprList
+	Items       []*SettingExpr
 }
 
 func (s *SettingsClause) Pos() Pos {
@@ -3561,18 +2761,6 @@ func (s *SettingsClause) Pos() Pos {
 
 func (s *SettingsClause) End() Pos {
 	return s.ListEnd
-}
-
-func (s *SettingsClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("SETTINGS ")
-	for i, item := range s.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	return builder.String()
 }
 
 func (s *SettingsClause) Accept(visitor ASTVisitor) error {
@@ -3599,17 +2787,6 @@ func (f *ParamExprList) Pos() Pos {
 
 func (f *ParamExprList) End() Pos {
 	return f.RightParenPos
-}
-
-func (f *ParamExprList) String() string {
-	var builder strings.Builder
-	builder.WriteString("(")
-	builder.WriteString(f.Items.String())
-	builder.WriteString(")")
-	if f.ColumnArgList != nil {
-		builder.WriteString(f.ColumnArgList.String())
-	}
-	return builder.String()
 }
 
 func (f *ParamExprList) Accept(visitor ASTVisitor) error {
@@ -3645,22 +2822,6 @@ func (m *MapLiteral) End() Pos {
 	return m.RBracePos
 }
 
-func (m *MapLiteral) String() string {
-	var builder strings.Builder
-	builder.WriteString("{")
-
-	for i, value := range m.KeyValues {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(value.Key.String())
-		builder.WriteString(": ")
-		builder.WriteString(value.Value.String())
-	}
-	builder.WriteString("}")
-	return builder.String()
-}
-
 func (m *MapLiteral) Accept(visitor ASTVisitor) error {
 	visitor.Enter(m)
 	defer visitor.Leave(m)
@@ -3673,6 +2834,32 @@ func (m *MapLiteral) Accept(visitor ASTVisitor) error {
 		}
 	}
 	return visitor.VisitMapLiteral(m)
+}
+
+type NamedParameterExpr struct {
+	NamePos Pos
+	Name    *Ident
+	Value   Expr
+}
+
+func (n *NamedParameterExpr) Pos() Pos {
+	return n.NamePos
+}
+
+func (n *NamedParameterExpr) End() Pos {
+	return n.Value.End()
+}
+
+func (n *NamedParameterExpr) Accept(visitor ASTVisitor) error {
+	visitor.Enter(n)
+	defer visitor.Leave(n)
+	if err := n.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if err := n.Value.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitNamedParameterExpr(n)
 }
 
 type QueryParam struct {
@@ -3688,16 +2875,6 @@ func (q *QueryParam) Pos() Pos {
 
 func (q *QueryParam) End() Pos {
 	return q.RBracePos
-}
-
-func (q *QueryParam) String() string {
-	var builder strings.Builder
-	builder.WriteString("{")
-	builder.WriteString(q.Name.String())
-	builder.WriteString(": ")
-	builder.WriteString(q.Type.String())
-	builder.WriteString("}")
-	return builder.String()
 }
 
 func (q *QueryParam) Accept(visitor ASTVisitor) error {
@@ -3726,19 +2903,6 @@ func (a *ArrayParamList) End() Pos {
 	return a.RightBracketPos
 }
 
-func (a *ArrayParamList) String() string {
-	var builder strings.Builder
-	builder.WriteString("[")
-	for i, item := range a.Items.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	builder.WriteString("]")
-	return builder.String()
-}
-
 func (a *ArrayParamList) Accept(visitor ASTVisitor) error {
 	visitor.Enter(a)
 	defer visitor.Leave(a)
@@ -3759,13 +2923,6 @@ func (o *ObjectParams) Pos() Pos {
 
 func (o *ObjectParams) End() Pos {
 	return o.Params.End()
-}
-
-func (o *ObjectParams) String() string {
-	var builder strings.Builder
-	builder.WriteString(o.Object.String())
-	builder.WriteString(o.Params.String())
-	return builder.String()
 }
 
 func (o *ObjectParams) Accept(visitor ASTVisitor) error {
@@ -3793,13 +2950,6 @@ func (f *FunctionExpr) End() Pos {
 	return f.Params.RightParenPos
 }
 
-func (f *FunctionExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(f.Name.String())
-	builder.WriteString(f.Params.String())
-	return builder.String()
-}
-
 func (f *FunctionExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(f)
 	defer visitor.Leave(f)
@@ -3824,14 +2974,6 @@ func (w *WindowFunctionExpr) Pos() Pos {
 
 func (w *WindowFunctionExpr) End() Pos {
 	return w.OverExpr.End()
-}
-
-func (w *WindowFunctionExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(w.Function.String())
-	builder.WriteString(" OVER ")
-	builder.WriteString(w.OverExpr.String())
-	return builder.String()
 }
 
 func (w *WindowFunctionExpr) Accept(visitor ASTVisitor) error {
@@ -3861,16 +3003,6 @@ func (t *TypedPlaceholder) End() Pos {
 	return t.RightBracePos
 }
 
-func (t *TypedPlaceholder) String() string {
-	var builder strings.Builder
-	builder.WriteString("{")
-	builder.WriteString(t.Name.String())
-	builder.WriteByte(':')
-	builder.WriteString(t.Type.String())
-	builder.WriteString("}")
-	return builder.String()
-}
-
 func (t *TypedPlaceholder) Accept(visitor ASTVisitor) error {
 	visitor.Enter(t)
 	defer visitor.Leave(t)
@@ -3897,16 +3029,6 @@ func (c *ColumnExpr) End() Pos {
 		return c.Alias.NameEnd
 	}
 	return c.Expr.End()
-}
-
-func (c *ColumnExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(c.Expr.String())
-	if c.Alias != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(c.Alias.String())
-	}
-	return builder.String()
 }
 
 func (c *ColumnExpr) Accept(visitor ASTVisitor) error {
@@ -3948,45 +3070,6 @@ func (c *ColumnDef) Pos() Pos {
 
 func (c *ColumnDef) End() Pos {
 	return c.ColumnEnd
-}
-
-func (c *ColumnDef) String() string {
-	var builder strings.Builder
-	builder.WriteString(c.Name.String())
-	if c.Type != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(c.Type.String())
-	}
-	if c.NotNull != nil {
-		builder.WriteString(" NOT NULL")
-	} else if c.Nullable != nil {
-		builder.WriteString(" NULL")
-	}
-	if c.DefaultExpr != nil {
-		builder.WriteString(" DEFAULT ")
-		builder.WriteString(c.DefaultExpr.String())
-	}
-	if c.MaterializedExpr != nil {
-		builder.WriteString(" MATERIALIZED ")
-		builder.WriteString(c.MaterializedExpr.String())
-	}
-	if c.AliasExpr != nil {
-		builder.WriteString(" ALIAS ")
-		builder.WriteString(c.AliasExpr.String())
-	}
-	if c.Codec != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(c.Codec.String())
-	}
-	if c.TTL != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(c.TTL.String())
-	}
-	if c.Comment != nil {
-		builder.WriteString(" COMMENT ")
-		builder.WriteString(c.Comment.String())
-	}
-	return builder.String()
 }
 
 func (c *ColumnDef) Accept(visitor ASTVisitor) error {
@@ -4060,10 +3143,6 @@ func (s *ScalarType) End() Pos {
 	return s.Name.NameEnd
 }
 
-func (s *ScalarType) String() string {
-	return s.Name.String()
-}
-
 func (s *ScalarType) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -4081,15 +3160,9 @@ type JSONPath struct {
 	Idents []*Ident
 }
 
-func (j *JSONPath) String() string {
-	var builder strings.Builder
-	for i, ident := range j.Idents {
-		if i > 0 {
-			builder.WriteString(".")
-		}
-		builder.WriteString(ident.String())
-	}
-	return builder.String()
+type JSONTypeHint struct {
+	Path *JSONPath
+	Type ColumnType
 }
 
 type JSONOption struct {
@@ -4097,29 +3170,8 @@ type JSONOption struct {
 	SkipRegex       *StringLiteral
 	MaxDynamicPaths *NumberLiteral
 	MaxDynamicTypes *NumberLiteral
-}
-
-func (j *JSONOption) String() string {
-	var builder strings.Builder
-	if j.SkipPath != nil {
-		builder.WriteString("SKIP ")
-		builder.WriteString(j.SkipPath.String())
-	}
-	if j.SkipRegex != nil {
-		builder.WriteString(" SKIP REGEXP ")
-		builder.WriteString(j.SkipRegex.String())
-	}
-	if j.MaxDynamicPaths != nil {
-		builder.WriteString("max_dynamic_paths")
-		builder.WriteByte('=')
-		builder.WriteString(j.MaxDynamicPaths.String())
-	}
-	if j.MaxDynamicTypes != nil {
-		builder.WriteString("max_dynamic_types")
-		builder.WriteByte('=')
-		builder.WriteString(j.MaxDynamicTypes.String())
-	}
-	return builder.String()
+	// Type hint for specific JSON subcolumn path, e.g., "message String" or "a.b UInt64"
+	Column *JSONTypeHint
 }
 
 type JSONOptions struct {
@@ -4136,19 +3188,6 @@ func (j *JSONOptions) End() Pos {
 	return j.RParen
 }
 
-func (j *JSONOptions) String() string {
-	var builder strings.Builder
-	builder.WriteByte('(')
-	for i, item := range j.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 type JSONType struct {
 	Name    *Ident
 	Options *JSONOptions
@@ -4163,15 +3202,6 @@ func (j *JSONType) End() Pos {
 		return j.Options.RParen
 	}
 	return j.Name.NameEnd
-}
-
-func (j *JSONType) String() string {
-	var builder strings.Builder
-	builder.WriteString(j.Name.String())
-	if j.Options != nil {
-		builder.WriteString(j.Options.String())
-	}
-	return builder.String()
 }
 
 func (j *JSONType) Type() string {
@@ -4197,10 +3227,6 @@ func (c *PropertyType) Pos() Pos {
 
 func (c *PropertyType) End() Pos {
 	return c.Name.NameEnd
-}
-
-func (c *PropertyType) String() string {
-	return c.Name.String()
 }
 
 func (c *PropertyType) Accept(visitor ASTVisitor) error {
@@ -4229,20 +3255,6 @@ func (s *TypeWithParams) Pos() Pos {
 
 func (s *TypeWithParams) End() Pos {
 	return s.RightParenPos
-}
-
-func (s *TypeWithParams) String() string {
-	var builder strings.Builder
-	builder.WriteString(s.Name.String())
-	builder.WriteByte('(')
-	for i, size := range s.Params {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(size.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
 }
 
 func (s *TypeWithParams) Accept(visitor ASTVisitor) error {
@@ -4278,20 +3290,6 @@ func (c *ComplexType) End() Pos {
 	return c.RightParenPos
 }
 
-func (c *ComplexType) String() string {
-	var builder strings.Builder
-	builder.WriteString(c.Name.String())
-	builder.WriteByte('(')
-	for i, param := range c.Params {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(param.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (c *ComplexType) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -4323,22 +3321,6 @@ func (n *NestedType) Pos() Pos {
 
 func (n *NestedType) End() Pos {
 	return n.RightParenPos
-}
-
-func (n *NestedType) String() string {
-	var builder strings.Builder
-	// on the same level as the column type
-	builder.WriteString(n.Name.String())
-	builder.WriteByte('(')
-	for i, column := range n.Columns {
-		builder.WriteString(column.String())
-		if i != len(n.Columns)-1 {
-			builder.WriteString(", ")
-		}
-	}
-	// right paren needs to be on the same level as the column
-	builder.WriteByte(')')
-	return builder.String()
 }
 
 func (n *NestedType) Accept(visitor ASTVisitor) error {
@@ -4376,42 +3358,23 @@ func (c *CompressionCodec) End() Pos {
 	return c.RightParenPos
 }
 
-func (c *CompressionCodec) String() string {
-	var builder strings.Builder
-	builder.WriteString("CODEC(")
-	if c.Type != nil {
-		builder.WriteString(c.Type.String())
-		if c.TypeLevel != nil {
-			builder.WriteByte('(')
-			builder.WriteString(c.TypeLevel.String())
-			builder.WriteByte(')')
-		}
-		builder.WriteByte(',')
-		builder.WriteByte(' ')
-	}
-	builder.WriteString(c.Name.String())
-	if c.Level != nil {
-		builder.WriteByte('(')
-		builder.WriteString(c.Level.String())
-		builder.WriteByte(')')
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (c *CompressionCodec) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
-	if err := c.Type.Accept(visitor); err != nil {
-		return err
+	if c.Type != nil {
+		if err := c.Type.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	if c.TypeLevel != nil {
 		if err := c.TypeLevel.Accept(visitor); err != nil {
 			return err
 		}
 	}
-	if err := c.Name.Accept(visitor); err != nil {
-		return err
+	if c.Name != nil {
+		if err := c.Name.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	if c.Level != nil {
 		if err := c.Level.Accept(visitor); err != nil {
@@ -4440,10 +3403,6 @@ func (n *NumberLiteral) End() Pos {
 	return n.NumEnd
 }
 
-func (n *NumberLiteral) String() string {
-	return n.Literal
-}
-
 func (n *NumberLiteral) Accept(visitor ASTVisitor) error {
 	visitor.Enter(n)
 	defer visitor.Leave(n)
@@ -4464,14 +3423,30 @@ func (s *StringLiteral) End() Pos {
 	return s.LiteralEnd
 }
 
-func (s *StringLiteral) String() string {
-	return "'" + s.Literal + "'"
-}
-
 func (s *StringLiteral) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
 	return visitor.VisitStringLiteral(s)
+}
+
+type BoolLiteral struct {
+	LiteralPos Pos
+	LiteralEnd Pos
+	Literal    string
+}
+
+func (b *BoolLiteral) Pos() Pos {
+	return b.LiteralPos
+}
+
+func (b *BoolLiteral) End() Pos {
+	return b.LiteralEnd
+}
+
+func (b *BoolLiteral) Accept(visitor ASTVisitor) error {
+	visitor.Enter(b)
+	defer visitor.Leave(b)
+	return visitor.VisitBoolLiteral(b)
 }
 
 type PlaceHolder struct {
@@ -4486,10 +3461,6 @@ func (p *PlaceHolder) Pos() Pos {
 
 func (p *PlaceHolder) End() Pos {
 	return p.PlaceHolderEnd
-}
-
-func (p *PlaceHolder) String() string {
-	return p.Type
 }
 
 func (p *PlaceHolder) Accept(visitor ASTVisitor) error {
@@ -4513,16 +3484,6 @@ func (r *RatioExpr) End() Pos {
 		return r.Denominator.NumEnd
 	}
 	return r.Numerator.NumEnd
-}
-
-func (r *RatioExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(r.Numerator.String())
-	if r.Denominator != nil {
-		builder.WriteString("/")
-		builder.WriteString(r.Denominator.String())
-	}
-	return builder.String()
 }
 
 func (r *RatioExpr) Accept(visitor ASTVisitor) error {
@@ -4552,14 +3513,6 @@ func (e *EnumValue) End() Pos {
 	return e.Value.End()
 }
 
-func (e *EnumValue) String() string {
-	var builder strings.Builder
-	builder.WriteString(e.Name.String())
-	builder.WriteByte('=')
-	builder.WriteString(e.Value.String())
-	return builder.String()
-}
-
 func (e *EnumValue) Accept(visitor ASTVisitor) error {
 	visitor.Enter(e)
 	defer visitor.Leave(e)
@@ -4585,20 +3538,6 @@ func (e *EnumType) Pos() Pos {
 
 func (e *EnumType) End() Pos {
 	return e.ListEnd
-}
-
-func (e *EnumType) String() string {
-	var builder strings.Builder
-	builder.WriteString(e.Name.String())
-	builder.WriteByte('(')
-	for i, enum := range e.Values {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(enum.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
 }
 
 func (e *EnumType) Accept(visitor ASTVisitor) error {
@@ -4638,17 +3577,6 @@ func (i *IntervalExpr) End() Pos {
 	return i.Unit.End()
 }
 
-func (i *IntervalExpr) String() string {
-	var builder strings.Builder
-	if i.IntervalPos != 0 {
-		builder.WriteString("INTERVAL ")
-	}
-	builder.WriteString(i.Expr.String())
-	builder.WriteByte(' ')
-	builder.WriteString(i.Unit.String())
-	return builder.String()
-}
-
 func (i *IntervalExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(i)
 	defer visitor.Leave(i)
@@ -4681,41 +3609,6 @@ func (e *EngineExpr) Pos() Pos {
 
 func (e *EngineExpr) End() Pos {
 	return e.EngineEnd
-}
-
-func (e *EngineExpr) String() string {
-	// align with the engine level
-	var builder strings.Builder
-	builder.WriteString(" ENGINE = ")
-	builder.WriteString(e.Name)
-	if e.Params != nil {
-		builder.WriteString(e.Params.String())
-	}
-	if e.PrimaryKey != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.PrimaryKey.String())
-	}
-	if e.PartitionBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.PartitionBy.String())
-	}
-	if e.SampleBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.SampleBy.String())
-	}
-	if e.TTL != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.TTL.String())
-	}
-	if e.Settings != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.Settings.String())
-	}
-	if e.OrderBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(e.OrderBy.String())
-	}
-	return builder.String()
 }
 
 func (e *EngineExpr) Accept(visitor ASTVisitor) error {
@@ -4771,10 +3664,6 @@ func (c *ColumnTypeExpr) End() Pos {
 	return c.Name.NameEnd
 }
 
-func (c *ColumnTypeExpr) String() string {
-	return c.Name.String()
-}
-
 func (c *ColumnTypeExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -4797,19 +3686,6 @@ func (c *ColumnArgList) Pos() Pos {
 
 func (c *ColumnArgList) End() Pos {
 	return c.RightParenPos
-}
-
-func (c *ColumnArgList) String() string {
-	var builder strings.Builder
-	builder.WriteByte('(')
-	for i, item := range c.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
 }
 
 func (c *ColumnArgList) Accept(visitor ASTVisitor) error {
@@ -4836,20 +3712,6 @@ func (c *ColumnExprList) Pos() Pos {
 
 func (c *ColumnExprList) End() Pos {
 	return c.ListEnd
-}
-
-func (c *ColumnExprList) String() string {
-	var builder strings.Builder
-	if c.HasDistinct {
-		builder.WriteString("DISTINCT ")
-	}
-	for i, item := range c.Items {
-		builder.WriteString(item.String())
-		if i != len(c.Items)-1 {
-			builder.WriteString(", ")
-		}
-	}
-	return builder.String()
 }
 
 func (c *ColumnExprList) Accept(visitor ASTVisitor) error {
@@ -4881,19 +3743,6 @@ func (w *WhenClause) End() Pos {
 		return w.Else.End()
 	}
 	return w.Then.End()
-}
-
-func (w *WhenClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("WHEN ")
-	builder.WriteString(w.When.String())
-	builder.WriteString(" THEN ")
-	builder.WriteString(w.Then.String())
-	if w.Else != nil {
-		builder.WriteString(" ELSE ")
-		builder.WriteString(w.Else.String())
-	}
-	return builder.String()
 }
 
 func (w *WhenClause) Accept(visitor ASTVisitor) error {
@@ -4928,23 +3777,6 @@ func (c *CaseExpr) Pos() Pos {
 
 func (c *CaseExpr) End() Pos {
 	return c.EndPos
-}
-
-func (c *CaseExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("CASE ")
-	if c.Expr != nil {
-		builder.WriteString(c.Expr.String())
-	}
-	for _, when := range c.Whens {
-		builder.WriteString(when.String())
-	}
-	if c.Else != nil {
-		builder.WriteString(" ELSE ")
-		builder.WriteString(c.Else.String())
-	}
-	builder.WriteString(" END")
-	return builder.String()
 }
 
 func (c *CaseExpr) Accept(visitor ASTVisitor) error {
@@ -4984,20 +3816,6 @@ func (c *CastExpr) End() Pos {
 	return c.AsType.End()
 }
 
-func (c *CastExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("CAST(")
-	builder.WriteString(c.Expr.String())
-	if c.Separator == "," {
-		builder.WriteString(", ")
-	} else {
-		builder.WriteString(" AS ")
-	}
-	builder.WriteString(c.AsType.String())
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (c *CastExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -5024,18 +3842,6 @@ func (w *WithClause) End() Pos {
 	return w.EndPos
 }
 
-func (w *WithClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("WITH ")
-	for i, cte := range w.CTEs {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(cte.String())
-	}
-	return builder.String()
-}
-
 func (w *WithClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(w)
 	defer visitor.Leave(w)
@@ -5060,16 +3866,6 @@ func (t *TopClause) Pos() Pos {
 
 func (t *TopClause) End() Pos {
 	return t.TopEnd
-}
-
-func (t *TopClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("TOP ")
-	builder.WriteString(t.Number.Literal)
-	if t.WithTies {
-		return "WITH TIES"
-	}
-	return builder.String()
 }
 
 func (t *TopClause) Accept(visitor ASTVisitor) error {
@@ -5104,42 +3900,6 @@ func (c *CreateLiveView) Pos() Pos {
 
 func (c *CreateLiveView) End() Pos {
 	return c.StatementEnd
-}
-
-func (c *CreateLiveView) String() string {
-	var builder strings.Builder
-	builder.WriteString("CREATE LIVE VIEW ")
-	if c.IfNotExists {
-		builder.WriteString("IF NOT EXISTS ")
-	}
-	builder.WriteString(c.Name.String())
-
-	if c.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.OnCluster.String())
-	}
-
-	if c.WithTimeout != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.WithTimeout.String())
-	}
-
-	if c.Destination != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Destination.String())
-	}
-
-	if c.TableSchema != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.TableSchema.String())
-	}
-
-	if c.SubQuery != nil {
-		builder.WriteString(" AS ")
-		builder.WriteString(c.SubQuery.String())
-	}
-
-	return builder.String()
 }
 
 func (c *CreateLiveView) Accept(visitor ASTVisitor) error {
@@ -5181,6 +3941,457 @@ func (c *CreateLiveView) Accept(visitor ASTVisitor) error {
 	return visitor.VisitCreateLiveView(c)
 }
 
+type CreateDictionary struct {
+	CreatePos    Pos
+	StatementEnd Pos
+	OrReplace    bool
+	Name         *TableIdentifier
+	IfNotExists  bool
+	UUID         *UUID
+	OnCluster    *ClusterClause
+	Schema       *DictionarySchemaClause
+	Engine       *DictionaryEngineClause
+	Comment      *StringLiteral
+}
+
+func (c *CreateDictionary) Type() string {
+	return "DICTIONARY"
+}
+
+func (c *CreateDictionary) Pos() Pos {
+	return c.CreatePos
+}
+
+func (c *CreateDictionary) End() Pos {
+	return c.StatementEnd
+}
+
+func (c *CreateDictionary) Accept(visitor ASTVisitor) error {
+	visitor.Enter(c)
+	defer visitor.Leave(c)
+	if err := c.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if c.UUID != nil {
+		if err := c.UUID.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.OnCluster != nil {
+		if err := c.OnCluster.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.Schema != nil {
+		if err := c.Schema.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.Engine != nil {
+		if err := c.Engine.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.Comment != nil {
+		if err := c.Comment.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitCreateDictionary(c)
+}
+
+type CreateNamedCollection struct {
+	CreatePos    Pos
+	StatementEnd Pos
+	Name         *Ident
+	IfNotExists  bool
+	OnCluster    *ClusterClause
+	Params       []*NamedCollectionParam
+}
+
+func (c *CreateNamedCollection) Pos() Pos {
+	return c.CreatePos
+}
+
+func (c *CreateNamedCollection) End() Pos {
+	return c.StatementEnd
+}
+
+func (c *CreateNamedCollection) Type() string {
+	return "NAMED COLLECTION"
+}
+
+func (c *CreateNamedCollection) Accept(visitor ASTVisitor) error {
+	visitor.Enter(c)
+	defer visitor.Leave(c)
+	if err := c.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if c.OnCluster != nil {
+		if err := c.OnCluster.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	for _, param := range c.Params {
+		if err := param.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitCreateNamedCollection(c)
+}
+
+type NamedCollectionParam struct {
+	ParamPos       Pos
+	Name           *Ident
+	Value          Expr
+	Overridable    bool
+	NotOverridable bool
+}
+
+func (n *NamedCollectionParam) Pos() Pos {
+	return n.ParamPos
+}
+
+func (n *NamedCollectionParam) End() Pos {
+	return n.Value.End()
+}
+
+func (n *NamedCollectionParam) Accept(visitor ASTVisitor) error {
+	visitor.Enter(n)
+	defer visitor.Leave(n)
+	if err := n.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if err := n.Value.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitNamedCollectionParam(n)
+}
+
+type DictionarySchemaClause struct {
+	SchemaPos  Pos
+	Attributes []*DictionaryAttribute
+	RParenPos  Pos
+}
+
+func (d *DictionarySchemaClause) Pos() Pos {
+	return d.SchemaPos
+}
+
+func (d *DictionarySchemaClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionarySchemaClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	for _, attr := range d.Attributes {
+		if err := attr.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionarySchemaClause(d)
+}
+
+type DictionaryAttribute struct {
+	NamePos      Pos
+	Name         *Ident
+	Type         ColumnType
+	Default      Literal
+	Expression   Expr
+	Hierarchical bool
+	Injective    bool
+	IsObjectId   bool
+}
+
+func (d *DictionaryAttribute) Pos() Pos {
+	return d.NamePos
+}
+
+func (d *DictionaryAttribute) End() Pos {
+	if d.IsObjectId {
+		return d.NamePos + Pos(len("IS_OBJECT_ID"))
+	}
+	if d.Injective {
+		return d.NamePos + Pos(len("INJECTIVE"))
+	}
+	if d.Hierarchical {
+		return d.NamePos + Pos(len("HIERARCHICAL"))
+	}
+	if d.Expression != nil {
+		return d.Expression.End()
+	}
+	if d.Default != nil {
+		return d.Default.End()
+	}
+	return d.Type.End()
+}
+
+func (d *DictionaryAttribute) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if err := d.Type.Accept(visitor); err != nil {
+		return err
+	}
+	if d.Default != nil {
+		if err := d.Default.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Expression != nil {
+		if err := d.Expression.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionaryAttribute(d)
+}
+
+type DictionaryEngineClause struct {
+	EnginePos  Pos
+	PrimaryKey *DictionaryPrimaryKeyClause
+	Source     *DictionarySourceClause
+	Lifetime   *DictionaryLifetimeClause
+	Layout     *DictionaryLayoutClause
+	Range      *DictionaryRangeClause
+	Settings   *SettingsClause
+}
+
+func (d *DictionaryEngineClause) Pos() Pos {
+	return d.EnginePos
+}
+
+func (d *DictionaryEngineClause) End() Pos {
+	if d.Settings != nil {
+		return d.Settings.End()
+	}
+	if d.Range != nil {
+		return d.Range.End()
+	}
+	if d.Layout != nil {
+		return d.Layout.End()
+	}
+	if d.Lifetime != nil {
+		return d.Lifetime.End()
+	}
+	if d.Source != nil {
+		return d.Source.End()
+	}
+	if d.PrimaryKey != nil {
+		return d.PrimaryKey.End()
+	}
+	return d.EnginePos
+}
+
+func (d *DictionaryEngineClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if d.PrimaryKey != nil {
+		if err := d.PrimaryKey.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Source != nil {
+		if err := d.Source.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Lifetime != nil {
+		if err := d.Lifetime.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Layout != nil {
+		if err := d.Layout.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Range != nil {
+		if err := d.Range.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Settings != nil {
+		if err := d.Settings.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionaryEngineClause(d)
+}
+
+type DictionaryPrimaryKeyClause struct {
+	PrimaryKeyPos Pos
+	Keys          *ColumnExprList
+	RParenPos     Pos
+}
+
+func (d *DictionaryPrimaryKeyClause) Pos() Pos {
+	return d.PrimaryKeyPos
+}
+
+func (d *DictionaryPrimaryKeyClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionaryPrimaryKeyClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Keys.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitDictionaryPrimaryKeyClause(d)
+}
+
+type DictionarySourceClause struct {
+	SourcePos Pos
+	Source    *Ident
+	Args      []*DictionaryArgExpr
+	RParenPos Pos
+}
+
+func (d *DictionarySourceClause) Pos() Pos {
+	return d.SourcePos
+}
+
+func (d *DictionarySourceClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionarySourceClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Source.Accept(visitor); err != nil {
+		return err
+	}
+	for _, arg := range d.Args {
+		if err := arg.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionarySourceClause(d)
+}
+
+type DictionaryArgExpr struct {
+	ArgPos Pos
+	Name   *Ident
+	Value  Expr // can be Ident with optional parentheses or literal
+}
+
+func (d *DictionaryArgExpr) Pos() Pos {
+	return d.ArgPos
+}
+
+func (d *DictionaryArgExpr) End() Pos {
+	return d.Value.End()
+}
+
+func (d *DictionaryArgExpr) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if err := d.Value.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitDictionaryArgExpr(d)
+}
+
+type DictionaryLifetimeClause struct {
+	LifetimePos Pos
+	Min         *NumberLiteral
+	Max         *NumberLiteral
+	Value       *NumberLiteral // for simple LIFETIME(value) form
+	RParenPos   Pos
+}
+
+func (d *DictionaryLifetimeClause) Pos() Pos {
+	return d.LifetimePos
+}
+
+func (d *DictionaryLifetimeClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionaryLifetimeClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if d.Value != nil {
+		if err := d.Value.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Min != nil {
+		if err := d.Min.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if d.Max != nil {
+		if err := d.Max.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionaryLifetimeClause(d)
+}
+
+type DictionaryLayoutClause struct {
+	LayoutPos Pos
+	Layout    *Ident
+	Args      []*DictionaryArgExpr
+	RParenPos Pos
+}
+
+func (d *DictionaryLayoutClause) Pos() Pos {
+	return d.LayoutPos
+}
+
+func (d *DictionaryLayoutClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionaryLayoutClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Layout.Accept(visitor); err != nil {
+		return err
+	}
+	for _, arg := range d.Args {
+		if err := arg.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDictionaryLayoutClause(d)
+}
+
+type DictionaryRangeClause struct {
+	RangePos  Pos
+	Min       *Ident
+	Max       *Ident
+	RParenPos Pos
+}
+
+func (d *DictionaryRangeClause) Pos() Pos {
+	return d.RangePos
+}
+
+func (d *DictionaryRangeClause) End() Pos {
+	return d.RParenPos + 1
+}
+
+func (d *DictionaryRangeClause) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Min.Accept(visitor); err != nil {
+		return err
+	}
+	if err := d.Max.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitDictionaryRangeClause(d)
+}
+
 type WithTimeoutClause struct {
 	WithTimeoutPos Pos
 	Expr           Expr
@@ -5193,13 +4404,6 @@ func (w *WithTimeoutClause) Pos() Pos {
 
 func (w *WithTimeoutClause) End() Pos {
 	return w.Number.End()
-}
-
-func (w *WithTimeoutClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("WITH TIMEOUT ")
-	builder.WriteString(w.Number.String())
-	return builder.String()
 }
 
 func (w *WithTimeoutClause) Accept(visitor ASTVisitor) error {
@@ -5225,19 +4429,6 @@ func (t *TableExpr) Pos() Pos {
 
 func (t *TableExpr) End() Pos {
 	return t.TableEnd
-}
-
-func (t *TableExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(t.Expr.String())
-	if t.Alias != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(t.Alias.String())
-	}
-	if t.HasFinal {
-		builder.WriteString(" FINAL")
-	}
-	return builder.String()
 }
 
 func (t *TableExpr) Accept(visitor ASTVisitor) error {
@@ -5267,13 +4458,6 @@ func (o *OnClause) End() Pos {
 	return o.On.End()
 }
 
-func (o *OnClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("ON ")
-	builder.WriteString(o.On.String())
-	return builder.String()
-}
-
 func (o *OnClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(o)
 	defer visitor.Leave(o)
@@ -5294,13 +4478,6 @@ func (u *UsingClause) Pos() Pos {
 
 func (u *UsingClause) End() Pos {
 	return u.Using.End()
-}
-
-func (u *UsingClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("USING ")
-	builder.WriteString(u.Using.String())
-	return builder.String()
 }
 
 func (u *UsingClause) Accept(visitor ASTVisitor) error {
@@ -5325,41 +4502,14 @@ func (j *JoinExpr) Pos() Pos {
 }
 
 func (j *JoinExpr) End() Pos {
-	return j.Left.End()
-}
-
-func buildJoinString(builder *strings.Builder, expr Expr) {
-	joinExpr, ok := expr.(*JoinExpr)
-	if !ok {
-		builder.WriteString(",")
-		builder.WriteString(expr.String())
-		return
-	}
-
-	if len(joinExpr.Modifiers) == 0 {
-		builder.WriteString(",")
-	} else {
-		builder.WriteString(" ")
-		builder.WriteString(strings.Join(joinExpr.Modifiers, " "))
-		builder.WriteByte(' ')
-	}
-	builder.WriteString(joinExpr.Left.String())
-	if joinExpr.Constraints != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(joinExpr.Constraints.String())
-	}
-	if joinExpr.Right != nil {
-		buildJoinString(builder, joinExpr.Right)
-	}
-}
-
-func (j *JoinExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(j.Left.String())
+	// Return the rightmost position
 	if j.Right != nil {
-		buildJoinString(&builder, j.Right)
+		return j.Right.End()
 	}
-	return builder.String()
+	if j.Constraints != nil {
+		return j.Constraints.End()
+	}
+	return j.Left.End()
 }
 
 func (j *JoinExpr) Accept(visitor ASTVisitor) error {
@@ -5398,18 +4548,6 @@ func (j *JoinConstraintClause) End() Pos {
 	return j.Using.End()
 }
 
-func (j *JoinConstraintClause) String() string {
-	var builder strings.Builder
-	if j.On != nil {
-		builder.WriteString("ON ")
-		builder.WriteString(j.On.String())
-	} else {
-		builder.WriteString("USING ")
-		builder.WriteString(j.Using.String())
-	}
-	return builder.String()
-}
-
 func (j *JoinConstraintClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(j)
 	defer visitor.Leave(j)
@@ -5437,13 +4575,6 @@ func (f *FromClause) Pos() Pos {
 
 func (f *FromClause) End() Pos {
 	return f.Expr.End()
-}
-
-func (f *FromClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("FROM ")
-	builder.WriteString(f.Expr.String())
-	return builder.String()
 }
 
 func (f *FromClause) Accept(visitor ASTVisitor) error {
@@ -5502,13 +4633,6 @@ func (n *IsNullExpr) End() Pos {
 	return n.Expr.End()
 }
 
-func (n *IsNullExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(n.Expr.String())
-	builder.WriteString(" IS NULL")
-	return builder.String()
-}
-
 func (n *IsNullExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(n)
 	defer visitor.Leave(n)
@@ -5529,13 +4653,6 @@ func (n *IsNotNullExpr) Pos() Pos {
 
 func (n *IsNotNullExpr) End() Pos {
 	return n.Expr.End()
-}
-
-func (n *IsNotNullExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(n.Expr.String())
-	builder.WriteString(" IS NOT NULL")
-	return builder.String()
 }
 
 func (n *IsNotNullExpr) Accept(visitor ASTVisitor) error {
@@ -5559,20 +4676,6 @@ func (a *AliasExpr) Pos() Pos {
 
 func (a *AliasExpr) End() Pos {
 	return a.Alias.End()
-}
-
-func (a *AliasExpr) String() string {
-	var builder strings.Builder
-	if _, isSelect := a.Expr.(*SelectQuery); isSelect {
-		builder.WriteByte('(')
-		builder.WriteString(a.Expr.String())
-		builder.WriteByte(')')
-	} else {
-		builder.WriteString(a.Expr.String())
-	}
-	builder.WriteString(" AS ")
-	builder.WriteString(a.Alias.String())
-	return builder.String()
 }
 
 func (a *AliasExpr) Accept(visitor ASTVisitor) error {
@@ -5600,13 +4703,6 @@ func (w *WhereClause) End() Pos {
 	return w.Expr.End()
 }
 
-func (w *WhereClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("WHERE ")
-	builder.WriteString(w.Expr.String())
-	return builder.String()
-}
-
 func (w *WhereClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(w)
 	defer visitor.Leave(w)
@@ -5627,10 +4723,6 @@ func (w *PrewhereClause) Pos() Pos {
 
 func (w *PrewhereClause) End() Pos {
 	return w.Expr.End()
-}
-
-func (w *PrewhereClause) String() string {
-	return "PREWHERE " + w.Expr.String()
 }
 
 func (w *PrewhereClause) Accept(visitor ASTVisitor) error {
@@ -5660,27 +4752,6 @@ func (g *GroupByClause) End() Pos {
 	return g.GroupByEnd
 }
 
-func (g *GroupByClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("GROUP BY ")
-	if g.AggregateType != "" {
-		builder.WriteString(g.AggregateType)
-	}
-	if g.Expr != nil {
-		builder.WriteString(g.Expr.String())
-	}
-	if g.WithCube {
-		builder.WriteString(" WITH CUBE")
-	}
-	if g.WithRollup {
-		builder.WriteString(" WITH ROLLUP")
-	}
-	if g.WithTotals {
-		builder.WriteString(" WITH TOTALS")
-	}
-	return builder.String()
-}
-
 func (g *GroupByClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(g)
 	defer visitor.Leave(g)
@@ -5703,10 +4774,6 @@ func (h *HavingClause) Pos() Pos {
 
 func (h *HavingClause) End() Pos {
 	return h.Expr.End()
-}
-
-func (h *HavingClause) String() string {
-	return "HAVING " + h.Expr.String()
 }
 
 func (h *HavingClause) Accept(visitor ASTVisitor) error {
@@ -5735,22 +4802,13 @@ func (l *LimitClause) End() Pos {
 	return l.Limit.End()
 }
 
-func (l *LimitClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("LIMIT ")
-	builder.WriteString(l.Limit.String())
-	if l.Offset != nil {
-		builder.WriteString(" OFFSET ")
-		builder.WriteString(l.Offset.String())
-	}
-	return builder.String()
-}
-
 func (l *LimitClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(l)
 	defer visitor.Leave(l)
-	if err := l.Limit.Accept(visitor); err != nil {
-		return err
+	if l.Limit != nil {
+		if err := l.Limit.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	if l.Offset != nil {
 		if err := l.Offset.Accept(visitor); err != nil {
@@ -5779,18 +4837,6 @@ func (l *LimitByClause) End() Pos {
 	return l.Limit.End()
 }
 
-func (l *LimitByClause) String() string {
-	var builder strings.Builder
-	if l.Limit != nil {
-		builder.WriteString(l.Limit.String())
-	}
-	if l.ByExpr != nil {
-		builder.WriteString(" BY ")
-		builder.WriteString(l.ByExpr.String())
-	}
-	return builder.String()
-}
-
 func (l *LimitByClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(l)
 	defer visitor.Leave(l)
@@ -5810,6 +4856,7 @@ func (l *LimitByClause) Accept(visitor ASTVisitor) error {
 type WindowExpr struct {
 	LeftParenPos  Pos
 	RightParenPos Pos
+	WindowName    *Ident
 	PartitionBy   *PartitionByClause
 	OrderBy       *OrderByClause
 	Frame         *WindowFrameClause
@@ -5823,28 +4870,14 @@ func (w *WindowExpr) End() Pos {
 	return w.RightParenPos
 }
 
-func (w *WindowExpr) String() string {
-	parts := make([]string, 0)
-	if w.PartitionBy != nil {
-		parts = append(parts, w.PartitionBy.String())
-	}
-	if w.OrderBy != nil {
-		parts = append(parts, w.OrderBy.String())
-	}
-	if w.Frame != nil {
-		parts = append(parts, w.Frame.String())
-	}
-
-	var builder strings.Builder
-	builder.WriteByte('(')
-	builder.WriteString(strings.Join(parts, " "))
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (w *WindowExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(w)
 	defer visitor.Leave(w)
+	if w.WindowName != nil {
+		if err := w.WindowName.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	if w.PartitionBy != nil {
 		if err := w.PartitionBy.Accept(visitor); err != nil {
 			return err
@@ -5863,12 +4896,30 @@ func (w *WindowExpr) Accept(visitor ASTVisitor) error {
 	return visitor.VisitWindowConditionExpr(w)
 }
 
-type WindowClause struct {
-	*WindowExpr
+type WindowDefinition struct {
+	Name  *Ident
+	AsPos Pos
+	Expr  *WindowExpr
+}
 
+func (w *WindowDefinition) Pos() Pos {
+	if w == nil || w.Name == nil {
+		return 0
+	}
+	return w.Name.Pos()
+}
+
+func (w *WindowDefinition) End() Pos {
+	if w == nil || w.Expr == nil {
+		return 0
+	}
+	return w.Expr.End()
+}
+
+type WindowClause struct {
 	WindowPos Pos
-	Name      *Ident
-	AsPos     Pos
+	EndPos    Pos
+	Windows   []*WindowDefinition
 }
 
 func (w *WindowClause) Pos() Pos {
@@ -5876,29 +4927,31 @@ func (w *WindowClause) Pos() Pos {
 }
 
 func (w *WindowClause) End() Pos {
-	return w.WindowExpr.End()
-}
-
-func (w *WindowClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("WINDOW ")
-	builder.WriteString(w.Name.String())
-	builder.WriteString(" AS ")
-	builder.WriteString(w.WindowExpr.String())
-	return builder.String()
+	if w.EndPos != 0 {
+		return w.EndPos
+	}
+	if len(w.Windows) == 0 {
+		return w.WindowPos
+	}
+	return w.Windows[len(w.Windows)-1].End()
 }
 
 func (w *WindowClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(w)
 	defer visitor.Leave(w)
-	if w.WindowExpr != nil {
-		if err := w.WindowExpr.Accept(visitor); err != nil {
-			return err
+	for _, window := range w.Windows {
+		if window == nil {
+			continue
 		}
-	}
-	if w.Name != nil {
-		if err := w.Name.Accept(visitor); err != nil {
-			return err
+		if window.Name != nil {
+			if err := window.Name.Accept(visitor); err != nil {
+				return err
+			}
+		}
+		if window.Expr != nil {
+			if err := window.Expr.Accept(visitor); err != nil {
+				return err
+			}
 		}
 	}
 	return visitor.VisitWindowExpr(w)
@@ -5918,14 +4971,6 @@ func (f *WindowFrameClause) End() Pos {
 	return f.Extend.End()
 }
 
-func (f *WindowFrameClause) String() string {
-	var builder strings.Builder
-	builder.WriteString(f.Type)
-	builder.WriteString(" ")
-	builder.WriteString(f.Extend.String())
-	return builder.String()
-}
-
 func (f *WindowFrameClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(f)
 	defer visitor.Leave(f)
@@ -5936,7 +4981,9 @@ func (f *WindowFrameClause) Accept(visitor ASTVisitor) error {
 }
 
 type WindowFrameExtendExpr struct {
-	Expr Expr
+	Expr      Expr
+	Direction string
+	EndPos    Pos
 }
 
 func (f *WindowFrameExtendExpr) Pos() Pos {
@@ -5944,11 +4991,10 @@ func (f *WindowFrameExtendExpr) Pos() Pos {
 }
 
 func (f *WindowFrameExtendExpr) End() Pos {
+	if f.EndPos != 0 {
+		return f.EndPos
+	}
 	return f.Expr.End()
-}
-
-func (f *WindowFrameExtendExpr) String() string {
-	return f.Expr.String()
 }
 
 func (f *WindowFrameExtendExpr) Accept(visitor ASTVisitor) error {
@@ -5976,18 +5022,6 @@ func (f *BetweenClause) Pos() Pos {
 
 func (f *BetweenClause) End() Pos {
 	return f.And.End()
-}
-
-func (f *BetweenClause) String() string {
-	var builder strings.Builder
-	if f.Expr != nil {
-		builder.WriteString(f.Expr.String())
-	}
-	builder.WriteString(" BETWEEN ")
-	builder.WriteString(f.Between.String())
-	builder.WriteString(" AND ")
-	builder.WriteString(f.And.String())
-	return builder.String()
 }
 
 func (f *BetweenClause) Accept(visitor ASTVisitor) error {
@@ -6020,10 +5054,6 @@ func (f *WindowFrameCurrentRow) End() Pos {
 	return f.RowEnd
 }
 
-func (f *WindowFrameCurrentRow) String() string {
-	return "CURRENT ROW"
-}
-
 func (f *WindowFrameCurrentRow) Accept(visitor ASTVisitor) error {
 	visitor.Enter(f)
 	defer visitor.Leave(f)
@@ -6044,10 +5074,6 @@ func (f *WindowFrameUnbounded) End() Pos {
 	return f.UnboundedEnd
 }
 
-func (f *WindowFrameUnbounded) String() string {
-	return "UNBOUNDED " + f.Direction
-}
-
 func (f *WindowFrameUnbounded) Accept(visitor ASTVisitor) error {
 	visitor.Enter(f)
 	defer visitor.Leave(f)
@@ -6055,9 +5081,9 @@ func (f *WindowFrameUnbounded) Accept(visitor ASTVisitor) error {
 }
 
 type WindowFrameNumber struct {
-	Number       *NumberLiteral
-	UnboundedEnd Pos
-	Direction    string
+	Number    *NumberLiteral
+	EndPos    Pos
+	Direction string
 }
 
 func (f *WindowFrameNumber) Pos() Pos {
@@ -6065,15 +5091,7 @@ func (f *WindowFrameNumber) Pos() Pos {
 }
 
 func (f *WindowFrameNumber) End() Pos {
-	return f.UnboundedEnd
-}
-
-func (f *WindowFrameNumber) String() string {
-	var builder strings.Builder
-	builder.WriteString(f.Number.String())
-	builder.WriteByte(' ')
-	builder.WriteString(f.Direction)
-	return builder.String()
+	return f.EndPos
 }
 
 func (f *WindowFrameNumber) Accept(visitor ASTVisitor) error {
@@ -6085,31 +5103,27 @@ func (f *WindowFrameNumber) Accept(visitor ASTVisitor) error {
 	return visitor.VisitWindowFrameNumber(f)
 }
 
-type ArrayJoinClause struct {
-	ArrayPos Pos
-	Type     string
-	Expr     Expr
+type WindowFrameParam struct {
+	Param     *QueryParam
+	EndPos    Pos
+	Direction string
 }
 
-func (a *ArrayJoinClause) Pos() Pos {
-	return a.ArrayPos
+func (f *WindowFrameParam) Pos() Pos {
+	return f.Param.Pos()
 }
 
-func (a *ArrayJoinClause) End() Pos {
-	return a.Expr.End()
+func (f *WindowFrameParam) End() Pos {
+	return f.EndPos
 }
 
-func (a *ArrayJoinClause) String() string {
-	return a.Type + " ARRAY JOIN " + a.Expr.String()
-}
-
-func (a *ArrayJoinClause) Accept(visitor ASTVisitor) error {
-	visitor.Enter(a)
-	defer visitor.Leave(a)
-	if err := a.Expr.Accept(visitor); err != nil {
+func (f *WindowFrameParam) Accept(visitor ASTVisitor) error {
+	visitor.Enter(f)
+	defer visitor.Leave(f)
+	if err := f.Param.Accept(visitor); err != nil {
 		return err
 	}
-	return visitor.VisitArrayJoinExpr(a)
+	return visitor.VisitWindowFrameParam(f)
 }
 
 type SelectQuery struct {
@@ -6118,9 +5132,9 @@ type SelectQuery struct {
 	With          *WithClause
 	Top           *TopClause
 	HasDistinct   bool
+	DistinctOn    *DistinctOn
 	SelectItems   []*SelectItem
 	From          *FromClause
-	ArrayJoin     *ArrayJoinClause
 	Window        *WindowClause
 	Prewhere      *PrewhereClause
 	Where         *WhereClause
@@ -6145,94 +5159,6 @@ func (s *SelectQuery) End() Pos {
 	return s.StatementEnd
 }
 
-func (s *SelectQuery) String() string { // nolint: funlen
-	var builder strings.Builder
-	if s.With != nil {
-		builder.WriteString("WITH")
-		for i, cte := range s.With.CTEs {
-			builder.WriteString(" ")
-			builder.WriteString(cte.String())
-			if i != len(s.With.CTEs)-1 {
-				builder.WriteByte(',')
-			}
-		}
-		builder.WriteString(" ")
-	}
-	builder.WriteString("SELECT ")
-	if s.HasDistinct {
-		builder.WriteString("DISTINCT ")
-	}
-	if s.Top != nil {
-		builder.WriteString(s.Top.String())
-		builder.WriteString(" ")
-	}
-	for i, selectItem := range s.SelectItems {
-		builder.WriteString(selectItem.String())
-		if i != len(s.SelectItems)-1 {
-			builder.WriteString(", ")
-		}
-	}
-	if s.From != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.From.String())
-	}
-	if s.ArrayJoin != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.ArrayJoin.String())
-	}
-	if s.Window != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Window.String())
-	}
-	if s.Prewhere != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Prewhere.String())
-	}
-	if s.Where != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Where.String())
-	}
-	if s.GroupBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.GroupBy.String())
-	}
-	if s.Having != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Having.String())
-	}
-	if s.OrderBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.OrderBy.String())
-	}
-	if s.LimitBy != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.LimitBy.String())
-	}
-	if s.Limit != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Limit.String())
-	}
-	if s.Settings != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Settings.String())
-	}
-	if s.Format != nil {
-		builder.WriteString(" ")
-		builder.WriteString(s.Format.String())
-	}
-	if s.UnionAll != nil {
-		builder.WriteString(" UNION ALL ")
-		builder.WriteString(s.UnionAll.String())
-	} else if s.UnionDistinct != nil {
-		builder.WriteString(" UNION DISTINCT ")
-		builder.WriteString(s.UnionDistinct.String())
-	} else if s.Except != nil {
-		builder.WriteString(" EXCEPT ")
-		builder.WriteString(s.Except.String())
-	}
-	return builder.String()
-}
-
 func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -6255,11 +5181,6 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	}
 	if s.From != nil {
 		if err := s.From.Accept(visitor); err != nil {
-			return err
-		}
-	}
-	if s.ArrayJoin != nil {
-		if err := s.ArrayJoin.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -6331,6 +5252,31 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	return visitor.VisitSelectQuery(s)
 }
 
+type DistinctOn struct {
+	Idents        []*NestedIdentifier
+	DistinctOnPos Pos
+	DistinctOnEnd Pos
+}
+
+func (s *DistinctOn) Pos() Pos {
+	return s.DistinctOnPos
+}
+
+func (s *DistinctOn) End() Pos {
+	return s.DistinctOnEnd
+}
+
+func (s *DistinctOn) Accept(visitor ASTVisitor) error {
+	visitor.Enter(s)
+	defer visitor.Leave(s)
+	for _, ident := range s.Idents {
+		if err := ident.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDistinctOn(s)
+}
+
 type SubQuery struct {
 	HasParen bool
 	Select   *SelectQuery
@@ -6342,17 +5288,6 @@ func (s *SubQuery) Pos() Pos {
 
 func (s *SubQuery) End() Pos {
 	return s.Select.End()
-}
-
-func (s *SubQuery) String() string {
-	if s.HasParen {
-		var builder strings.Builder
-		builder.WriteString("(")
-		builder.WriteString(s.Select.String())
-		builder.WriteString(")")
-		return builder.String()
-	}
-	return s.Select.String()
 }
 
 func (s *SubQuery) Accept(visitor ASTVisitor) error {
@@ -6379,10 +5314,6 @@ func (n *NotExpr) End() Pos {
 	return n.Expr.End()
 }
 
-func (n *NotExpr) String() string {
-	return "NOT " + n.Expr.String()
-}
-
 func (n *NotExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(n)
 	defer visitor.Leave(n)
@@ -6403,10 +5334,6 @@ func (n *NegateExpr) Pos() Pos {
 
 func (n *NegateExpr) End() Pos {
 	return n.Expr.End()
-}
-
-func (n *NegateExpr) String() string {
-	return "-" + n.Expr.String()
 }
 
 func (n *NegateExpr) Accept(visitor ASTVisitor) error {
@@ -6431,10 +5358,6 @@ func (g *GlobalInOperation) End() Pos {
 	return g.Expr.End()
 }
 
-func (g *GlobalInOperation) String() string {
-	return "GLOBAL " + g.Expr.String()
-}
-
 func (g *GlobalInOperation) Accept(visitor ASTVisitor) error {
 	visitor.Enter(g)
 	defer visitor.Leave(g)
@@ -6444,11 +5367,33 @@ func (g *GlobalInOperation) Accept(visitor ASTVisitor) error {
 	return visitor.VisitGlobalInExpr(g)
 }
 
+type IntervalFrom struct {
+	Interval *Ident
+	FromPos  Pos
+	FromExpr Expr
+}
+
+func (i *IntervalFrom) Pos() Pos {
+	return i.Interval.NamePos
+}
+
+func (i *IntervalFrom) End() Pos {
+	return i.FromExpr.End()
+}
+
+func (i *IntervalFrom) Accept(visitor ASTVisitor) error {
+	visitor.Enter(i)
+	defer visitor.Leave(i)
+	if err := i.FromExpr.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitIntervalFrom(i)
+}
+
 type ExtractExpr struct {
 	ExtractPos Pos
-	Interval   *Ident
-	FromPos    Pos
-	FromExpr   Expr
+	ExtractEnd Pos
+	Parameters []Expr
 }
 
 func (e *ExtractExpr) Pos() Pos {
@@ -6456,24 +5401,16 @@ func (e *ExtractExpr) Pos() Pos {
 }
 
 func (e *ExtractExpr) End() Pos {
-	return e.FromExpr.End()
-}
-
-func (e *ExtractExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("EXTRACT(")
-	builder.WriteString(e.Interval.String())
-	builder.WriteString(" FROM ")
-	builder.WriteString(e.FromExpr.String())
-	builder.WriteByte(')')
-	return builder.String()
+	return e.ExtractEnd
 }
 
 func (e *ExtractExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(e)
 	defer visitor.Leave(e)
-	if err := e.FromExpr.Accept(visitor); err != nil {
-		return err
+	for _, param := range e.Parameters {
+		if err := param.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitExtractExpr(e)
 }
@@ -6496,20 +5433,6 @@ func (d *DropDatabase) End() Pos {
 
 func (d *DropDatabase) Type() string {
 	return "DATABASE"
-}
-
-func (d *DropDatabase) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP DATABASE ")
-	if d.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(d.Name.String())
-	if d.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(d.OnCluster.String())
-	}
-	return builder.String()
 }
 
 func (d *DropDatabase) Accept(visitor ASTVisitor) error {
@@ -6550,27 +5473,6 @@ func (d *DropStmt) Type() string {
 	return "DROP " + d.DropTarget
 }
 
-func (d *DropStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP ")
-	if d.IsTemporary {
-		builder.WriteString("TEMPORARY ")
-	}
-	builder.WriteString(d.DropTarget + " ")
-	if d.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(d.Name.String())
-	if d.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(d.OnCluster.String())
-	}
-	if len(d.Modifier) != 0 {
-		builder.WriteString(" " + d.Modifier)
-	}
-	return builder.String()
-}
-
 func (d *DropStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(d)
 	defer visitor.Leave(d)
@@ -6608,28 +5510,6 @@ func (d *DropUserOrRole) Type() string {
 	return d.Target
 }
 
-func (d *DropUserOrRole) String() string {
-	var builder strings.Builder
-	builder.WriteString("DROP " + d.Target + " ")
-	if d.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	for i, name := range d.Names {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(name.String())
-	}
-	if len(d.Modifier) != 0 {
-		builder.WriteString(" " + d.Modifier)
-	}
-	if d.From != nil {
-		builder.WriteString(" FROM ")
-		builder.WriteString(d.From.String())
-	}
-	return builder.String()
-}
-
 func (d *DropUserOrRole) Accept(visitor ASTVisitor) error {
 	visitor.Enter(d)
 	defer visitor.Leave(d)
@@ -6660,10 +5540,6 @@ func (u *UseStmt) End() Pos {
 	return u.Database.End()
 }
 
-func (u *UseStmt) String() string {
-	return "USE " + u.Database.String()
-}
-
 func (u *UseStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(u)
 	defer visitor.Leave(u)
@@ -6685,20 +5561,6 @@ func (c *CTEStmt) Pos() Pos {
 
 func (c *CTEStmt) End() Pos {
 	return c.Expr.End()
-}
-
-func (c *CTEStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString(c.Expr.String())
-	builder.WriteString(" AS ")
-	if _, isSelect := c.Alias.(*SelectQuery); isSelect {
-		builder.WriteByte('(')
-		builder.WriteString(c.Alias.String())
-		builder.WriteByte(')')
-	} else {
-		builder.WriteString(c.Alias.String())
-	}
-	return builder.String()
 }
 
 func (c *CTEStmt) Accept(visitor ASTVisitor) error {
@@ -6726,18 +5588,6 @@ func (s *SetStmt) End() Pos {
 	return s.Settings.End()
 }
 
-func (s *SetStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("SET ")
-	for i, item := range s.Settings.Items {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(item.String())
-	}
-	return builder.String()
-}
-
 func (s *SetStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -6758,10 +5608,6 @@ func (f *FormatClause) Pos() Pos {
 
 func (f *FormatClause) End() Pos {
 	return f.Format.End()
-}
-
-func (f *FormatClause) String() string {
-	return "FORMAT " + f.Format.String()
 }
 
 func (f *FormatClause) Accept(visitor ASTVisitor) error {
@@ -6789,27 +5635,6 @@ func (o *OptimizeStmt) Pos() Pos {
 
 func (o *OptimizeStmt) End() Pos {
 	return o.StatementEnd
-}
-
-func (o *OptimizeStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("OPTIMIZE TABLE ")
-	builder.WriteString(o.Table.String())
-	if o.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(o.OnCluster.String())
-	}
-	if o.Partition != nil {
-		builder.WriteString(" ")
-		builder.WriteString(o.Partition.String())
-	}
-	if o.HasFinal {
-		builder.WriteString(" FINAL")
-	}
-	if o.Deduplicate != nil {
-		builder.WriteString(o.Deduplicate.String())
-	}
-	return builder.String()
 }
 
 func (o *OptimizeStmt) Accept(visitor ASTVisitor) error {
@@ -6855,20 +5680,6 @@ func (d *DeduplicateClause) End() Pos {
 	return d.DeduplicatePos + Pos(len(KeywordDeduplicate))
 }
 
-func (d *DeduplicateClause) String() string {
-	var builder strings.Builder
-	builder.WriteString(" DEDUPLICATE")
-	if d.By != nil {
-		builder.WriteString(" BY ")
-		builder.WriteString(d.By.String())
-	}
-	if d.Except != nil {
-		builder.WriteString(" EXCEPT ")
-		builder.WriteString(d.Except.String())
-	}
-	return builder.String()
-}
-
 func (d *DeduplicateClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(d)
 	defer visitor.Leave(d)
@@ -6898,10 +5709,6 @@ func (s *SystemStmt) End() Pos {
 	return s.Expr.End()
 }
 
-func (s *SystemStmt) String() string {
-	return "SYSTEM " + s.Expr.String()
-}
-
 func (s *SystemStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -6924,17 +5731,6 @@ func (s *SystemFlushExpr) Pos() Pos {
 
 func (s *SystemFlushExpr) End() Pos {
 	return s.StatementEnd
-}
-
-func (s *SystemFlushExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("FLUSH ")
-	if s.Logs {
-		builder.WriteString("LOGS")
-	} else {
-		builder.WriteString(s.Distributed.String())
-	}
-	return builder.String()
 }
 
 func (s *SystemFlushExpr) Accept(visitor ASTVisitor) error {
@@ -6963,17 +5759,6 @@ func (s *SystemReloadExpr) End() Pos {
 	return s.StatementEnd
 }
 
-func (s *SystemReloadExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("RELOAD ")
-	builder.WriteString(s.Type)
-	if s.Dictionary != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(s.Dictionary.String())
-	}
-	return builder.String()
-}
-
 func (s *SystemReloadExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -6996,13 +5781,6 @@ func (s *SystemSyncExpr) Pos() Pos {
 
 func (s *SystemSyncExpr) End() Pos {
 	return s.Cluster.End()
-}
-
-func (s *SystemSyncExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString("SYNC ")
-	builder.WriteString(s.Cluster.String())
-	return builder.String()
 }
 
 func (s *SystemSyncExpr) Accept(visitor ASTVisitor) error {
@@ -7030,18 +5808,6 @@ func (s *SystemCtrlExpr) End() Pos {
 	return s.StatementEnd
 }
 
-func (s *SystemCtrlExpr) String() string {
-	var builder strings.Builder
-	builder.WriteString(s.Command)
-	builder.WriteByte(' ')
-	builder.WriteString(s.Type)
-	if s.Cluster != nil {
-		builder.WriteByte(' ')
-		builder.WriteString(s.Cluster.String())
-	}
-	return builder.String()
-}
-
 func (s *SystemCtrlExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -7065,10 +5831,6 @@ func (s *SystemDropExpr) Pos() Pos {
 
 func (s *SystemDropExpr) End() Pos {
 	return s.StatementEnd
-}
-
-func (s *SystemDropExpr) String() string {
-	return "DROP " + s.Type
 }
 
 func (s *SystemDropExpr) Accept(visitor ASTVisitor) error {
@@ -7096,24 +5858,6 @@ func (t *TruncateTable) End() Pos {
 
 func (t *TruncateTable) Type() string {
 	return "TRUNCATE TABLE"
-}
-
-func (t *TruncateTable) String() string {
-	var builder strings.Builder
-	builder.WriteString("TRUNCATE ")
-	if t.IsTemporary {
-		builder.WriteString("TEMPORARY ")
-	}
-	builder.WriteString("TABLE ")
-	if t.IfExists {
-		builder.WriteString("IF EXISTS ")
-	}
-	builder.WriteString(t.Name.String())
-	if t.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(t.OnCluster.String())
-	}
-	return builder.String()
 }
 
 func (t *TruncateTable) Accept(visitor ASTVisitor) error {
@@ -7147,17 +5891,6 @@ func (s *SampleClause) End() Pos {
 	return s.Ratio.End()
 }
 
-func (s *SampleClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("SAMPLE ")
-	builder.WriteString(s.Ratio.String())
-	if s.Offset != nil {
-		builder.WriteString(" OFFSET ")
-		builder.WriteString(s.Offset.String())
-	}
-	return builder.String()
-}
-
 func (s *SampleClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
@@ -7185,21 +5918,6 @@ func (d *DeleteClause) Pos() Pos {
 
 func (d *DeleteClause) End() Pos {
 	return d.WhereExpr.End()
-}
-
-func (d *DeleteClause) String() string {
-	var builder strings.Builder
-	builder.WriteString("DELETE FROM ")
-	builder.WriteString(d.Table.String())
-	if d.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(d.OnCluster.String())
-	}
-	if d.WhereExpr != nil {
-		builder.WriteString(" WHERE ")
-		builder.WriteString(d.WhereExpr.String())
-	}
-	return builder.String()
 }
 
 func (d *DeleteClause) Accept(visitor ASTVisitor) error {
@@ -7235,19 +5953,6 @@ func (c *ColumnNamesExpr) End() Pos {
 	return c.RightParenPos
 }
 
-func (c *ColumnNamesExpr) String() string {
-	var builder strings.Builder
-	builder.WriteByte('(')
-	for i, column := range c.ColumnNames {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(column.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
-}
-
 func (c *ColumnNamesExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -7271,19 +5976,6 @@ func (v *AssignmentValues) Pos() Pos {
 
 func (v *AssignmentValues) End() Pos {
 	return v.RightParenPos
-}
-
-func (v *AssignmentValues) String() string {
-	var builder strings.Builder
-	builder.WriteByte('(')
-	for i, value := range v.Values {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(value.String())
-	}
-	builder.WriteByte(')')
-	return builder.String()
 }
 
 func (v *AssignmentValues) Accept(visitor ASTVisitor) error {
@@ -7316,37 +6008,6 @@ func (i *InsertStmt) End() Pos {
 		return i.SelectExpr.End()
 	}
 	return i.Values[len(i.Values)-1].End()
-}
-
-func (i *InsertStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("INSERT INTO ")
-	if i.HasTableKeyword {
-		builder.WriteString("TABLE ")
-	}
-	builder.WriteString(i.Table.String())
-	if i.ColumnNames != nil {
-		builder.WriteString(" ")
-		builder.WriteString(i.ColumnNames.String())
-	}
-	if i.Format != nil {
-		builder.WriteString(" ")
-		builder.WriteString(i.Format.String())
-	}
-
-	if i.SelectExpr != nil {
-		builder.WriteString(" ")
-		builder.WriteString(i.SelectExpr.String())
-	} else if len(i.Values) > 0 {
-		builder.WriteString(" VALUES ")
-		for j, value := range i.Values {
-			if j > 0 {
-				builder.WriteString(", ")
-			}
-			builder.WriteString(value.String())
-		}
-	}
-	return builder.String()
 }
 
 func (i *InsertStmt) Accept(visitor ASTVisitor) error {
@@ -7392,17 +6053,6 @@ func (c *CheckStmt) End() Pos {
 	return c.Partition.End()
 }
 
-func (c *CheckStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("CHECK TABLE ")
-	builder.WriteString(c.Table.String())
-	if c.Partition != nil {
-		builder.WriteString(" ")
-		builder.WriteString(c.Partition.String())
-	}
-	return builder.String()
-}
-
 func (c *CheckStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
@@ -7429,10 +6079,6 @@ func (n *UnaryExpr) Pos() Pos {
 
 func (n *UnaryExpr) End() Pos {
 	return n.Expr.End()
-}
-
-func (n *UnaryExpr) String() string {
-	return string(n.Kind) + " " + n.Expr.String()
 }
 
 func (n *UnaryExpr) Accept(visitor ASTVisitor) error {
@@ -7463,24 +6109,6 @@ func (r *RenameStmt) End() Pos {
 
 func (r *RenameStmt) Type() string {
 	return "RENAME " + r.RenameTarget
-}
-
-func (r *RenameStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("RENAME " + r.RenameTarget + " ")
-	for i, pair := range r.TargetPairList {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(pair.Old.String())
-		builder.WriteString(" TO ")
-		builder.WriteString(pair.New.String())
-	}
-	if r.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(r.OnCluster.String())
-	}
-	return builder.String()
 }
 
 func (r *RenameStmt) Accept(visitor ASTVisitor) error {
@@ -7515,8 +6143,16 @@ func (t *TargetPair) End() Pos {
 	return t.New.End()
 }
 
-func (t *TargetPair) String() string {
-	return t.Old.String() + " TO " + t.New.String()
+func (t *TargetPair) Accept(visitor ASTVisitor) error {
+	visitor.Enter(t)
+	defer visitor.Leave(t)
+	if err := t.Old.Accept(visitor); err != nil {
+		return err
+	}
+	if err := t.New.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitTargetPairExpr(t)
 }
 
 type ExplainStmt struct {
@@ -7531,15 +6167,6 @@ func (e *ExplainStmt) Pos() Pos {
 
 func (e *ExplainStmt) End() Pos {
 	return e.Statement.End()
-}
-
-func (e *ExplainStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("EXPLAIN ")
-	builder.WriteString(e.Type)
-	builder.WriteByte(' ')
-	builder.WriteString(e.Statement.String())
-	return builder.String()
 }
 
 func (e *ExplainStmt) Accept(visitor ASTVisitor) error {
@@ -7564,20 +6191,6 @@ func (p *PrivilegeClause) Pos() Pos {
 
 func (p *PrivilegeClause) End() Pos {
 	return p.PrivilegeEnd
-}
-
-func (p *PrivilegeClause) String() string {
-	var builder strings.Builder
-	for i, keyword := range p.Keywords {
-		if i > 0 {
-			builder.WriteByte(' ')
-		}
-		builder.WriteString(keyword)
-	}
-	if p.Params != nil {
-		builder.WriteString(p.Params.String())
-	}
-	return builder.String()
 }
 
 func (p *PrivilegeClause) Accept(visitor ASTVisitor) error {
@@ -7613,35 +6226,6 @@ func (g *GrantPrivilegeStmt) Type() string {
 	return "GRANT PRIVILEGE"
 }
 
-func (g *GrantPrivilegeStmt) String() string {
-	var builder strings.Builder
-	builder.WriteString("GRANT ")
-	if g.OnCluster != nil {
-		builder.WriteString(" ")
-		builder.WriteString(g.OnCluster.String())
-	}
-	for i, privilege := range g.Privileges {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(privilege.String())
-	}
-	builder.WriteString(" ON ")
-	builder.WriteString(g.On.String())
-	builder.WriteString(" TO ")
-	for i, role := range g.To {
-		if i > 0 {
-			builder.WriteString(", ")
-		}
-		builder.WriteString(role.String())
-	}
-	for _, option := range g.WithOptions {
-		builder.WriteString(" WITH " + option + " OPTION")
-	}
-
-	return builder.String()
-}
-
 func (g *GrantPrivilegeStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(g)
 	defer visitor.Leave(g)
@@ -7664,4 +6248,107 @@ func (g *GrantPrivilegeStmt) Accept(visitor ASTVisitor) error {
 		}
 	}
 	return visitor.VisitGrantPrivilegeExpr(g)
+}
+
+type ShowStmt struct {
+	ShowPos      Pos
+	StatementEnd Pos
+	ShowType     string           // e.g., "CREATE TABLE", "DATABASES", "TABLES"
+	Target       *TableIdentifier // for SHOW CREATE TABLE table_name
+
+	// Optional clauses for SHOW DATABASES
+	NotLike     bool           // true if NOT LIKE/ILIKE
+	LikeType    string         // "LIKE" or "ILIKE", empty if not used
+	LikePattern Expr           // pattern expression for LIKE/ILIKE
+	Limit       Expr           // limit expression
+	OutFile     *StringLiteral // filename for INTO OUTFILE
+	Format      *StringLiteral // format specification
+}
+
+func (s *ShowStmt) Pos() Pos {
+	return s.ShowPos
+}
+
+func (s *ShowStmt) End() Pos {
+	// Find the rightmost element to determine the end position
+	if s.Format != nil {
+		return s.Format.End()
+	}
+	if s.OutFile != nil {
+		return s.OutFile.End()
+	}
+	if s.Limit != nil {
+		return s.Limit.End()
+	}
+	if s.LikePattern != nil {
+		return s.LikePattern.End()
+	}
+	if s.Target != nil {
+		return s.Target.End()
+	}
+	return s.StatementEnd
+}
+
+func (s *ShowStmt) Accept(visitor ASTVisitor) error {
+	visitor.Enter(s)
+	defer visitor.Leave(s)
+	if s.Target != nil {
+		if err := s.Target.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.LikePattern != nil {
+		if err := s.LikePattern.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.Limit != nil {
+		if err := s.Limit.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.OutFile != nil {
+		if err := s.OutFile.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.Format != nil {
+		if err := s.Format.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitShowExpr(s)
+}
+
+type DescribeStmt struct {
+	DescribePos  Pos
+	StatementEnd Pos
+	DescribeType string // e.g., "TABLE", empty if not used
+	Target       *TableExpr
+	Settings     *SettingsClause
+}
+
+func (d *DescribeStmt) Pos() Pos {
+	return d.DescribePos
+}
+
+func (d *DescribeStmt) End() Pos {
+	if d.Settings != nil {
+		return d.Settings.End()
+	}
+	return d.Target.End()
+}
+
+func (d *DescribeStmt) Accept(visitor ASTVisitor) error {
+	visitor.Enter(d)
+	defer visitor.Leave(d)
+	if err := d.Target.Accept(visitor); err != nil {
+		return err
+	}
+	if d.Settings != nil {
+		if err := d.Settings.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return visitor.VisitDescribeExpr(d)
 }

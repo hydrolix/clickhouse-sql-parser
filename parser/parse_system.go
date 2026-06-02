@@ -19,6 +19,20 @@ func (p *Parser) parseSetStmt(pos Pos) (*SetStmt, error) {
 	}, nil
 }
 
+func (p *Parser) parseSettingsStmt(pos Pos) (*SetStmt, error) {
+	if err := p.expectKeyword(KeywordSettings); err != nil {
+		return nil, err
+	}
+	settings, err := p.parseSettingsClause(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	return &SetStmt{
+		SetPos:   pos,
+		Settings: settings,
+	}, nil
+}
+
 func (p *Parser) parseSystemFlushExpr(pos Pos) (*SystemFlushExpr, error) {
 	if err := p.expectKeyword(KeywordFlush); err != nil {
 		return nil, err
@@ -809,6 +823,18 @@ func (p *Parser) parseOptionalClauses(createUser *CreateUser) error {
 			}
 			createUser.Authentication = auth
 			createUser.StatementEnd = auth.End()
+
+		case p.matchKeyword(KeywordValid):
+			_ = p.lexer.consumeToken() // consume VALID keyword
+			if err := p.expectKeyword(KeywordUntil); err != nil {
+				return err
+			}
+			validUntil, err := p.parseString(p.Pos())
+			if err != nil {
+				return err
+			}
+			createUser.ValidUntil = validUntil
+			createUser.StatementEnd = validUntil.End()
 
 		case p.matchKeyword(KeywordHost):
 			hosts, err := p.parseHostClauses()

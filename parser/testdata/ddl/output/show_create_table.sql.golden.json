@@ -1,0 +1,22 @@
+[
+  {
+    "ShowPos": 0,
+    "StatementEnd": 26,
+    "ShowType": "CREATE TABLE",
+    "Target": {
+      "Database": null,
+      "Table": {
+        "Name": "mytable",
+        "QuoteType": 1,
+        "NamePos": 18,
+        "NameEnd": 25
+      }
+    },
+    "NotLike": false,
+    "LikeType": "",
+    "LikePattern": null,
+    "Limit": null,
+    "OutFile": null,
+    "Format": null
+  }
+]

@@ -31,6 +31,7 @@ const (
 	KeywordCluster      = "CLUSTER"
 	KeywordCodec        = "CODEC"
 	KeywordCollate      = "COLLATE"
+	KeywordCollection   = "COLLECTION"
 	KeywordColumn       = "COLUMN"
 	KeywordColumns      = "COLUMNS"
 	KeywordComment      = "COMMENT"
@@ -78,6 +79,7 @@ const (
 	KeywordFalse        = "FALSE"
 	KeywordFetches      = "FETCHES"
 	KeywordFileSystem   = "FILESYSTEM"
+	KeywordFill         = "FILL"
 	KeywordFinal        = "FINAL"
 	KeywordFirst        = "FIRST"
 	KeywordFlush        = "FLUSH"
@@ -110,6 +112,7 @@ const (
 	KeywordInner        = "INNER"
 	KeywordInsert       = "INSERT"
 	KeywordInterval     = "INTERVAL"
+	KeywordInterpolate  = "INTERPOLATE"
 	KeywordInto         = "INTO"
 	KeywordIp           = "IP"
 	KeywordIs           = "IS"
@@ -143,6 +146,7 @@ const (
 	KeywordMoves        = "MOVES"
 	KeywordMutation     = "MUTATION"
 	KeywordName         = "NAME"
+	KeywordNamed        = "NAMED"
 	KeywordNan_sql      = "NAN_SQL"
 	KeywordNo           = "NO"
 	KeywordNone         = "NONE"
@@ -155,6 +159,7 @@ const (
 	KeywordOption       = "OPTION"
 	KeywordOr           = "OR"
 	KeywordOrder        = "ORDER"
+	KeywordOverridable  = "OVERRIDABLE"
 	KeywordOuter        = "OUTER"
 	KeywordOutfile      = "OUTFILE"
 	KeywordOver         = "OVER"
@@ -180,6 +185,7 @@ const (
 	KeywordRemove       = "REMOVE"
 	KeywordRename       = "RENAME"
 	KeywordReplace      = "REPLACE"
+	KeywordReset        = "RESET"
 	KeywordReplica      = "REPLICA"
 	KeywordReplicated   = "REPLICATED"
 	KeywordReplication  = "REPLICATION"
@@ -197,12 +203,15 @@ const (
 	KeywordServer       = "SERVER"
 	KeywordSet          = "SET"
 	KeywordSets         = "SETS"
+	KeywordSetting      = "SETTING"
 	KeywordSettings     = "SETTINGS"
 	KeywordShow         = "SHOW"
 	KeywordShutdown     = "SHUTDOWN"
 	KeywordSkip         = "SKIP"
 	KeywordSource       = "SOURCE"
 	KeywordStart        = "START"
+	KeywordStaleness    = "STALENESS"
+	KeywordStep         = "STEP"
 	KeywordStop         = "STOP"
 	KeywordSubstring    = "SUBSTRING"
 	KeywordSync         = "SYNC"
@@ -232,7 +241,9 @@ const (
 	KeywordUse          = "USE"
 	KeywordUser         = "USER"
 	KeywordUsing        = "USING"
+	KeywordUntil        = "UNTIL"
 	KeywordUuid         = "UUID"
+	KeywordValid        = "VALID"
 	KeywordValues       = "VALUES"
 	KeywordView         = "VIEW"
 	KeywordVolume       = "VOLUME"
@@ -279,6 +290,7 @@ var keywords = NewSet(
 	KeywordCluster,
 	KeywordCodec,
 	KeywordCollate,
+	KeywordCollection,
 	KeywordColumn,
 	KeywordColumns,
 	KeywordComment,
@@ -326,6 +338,7 @@ var keywords = NewSet(
 	KeywordFalse,
 	KeywordFetches,
 	KeywordFileSystem,
+	KeywordFill,
 	KeywordFinal,
 	KeywordFirst,
 	KeywordFlush,
@@ -358,6 +371,7 @@ var keywords = NewSet(
 	KeywordInner,
 	KeywordInsert,
 	KeywordInterval,
+	KeywordInterpolate,
 	KeywordInto,
 	KeywordIp,
 	KeywordIs,
@@ -391,6 +405,7 @@ var keywords = NewSet(
 	KeywordMoves,
 	KeywordMutation,
 	KeywordName,
+	KeywordNamed,
 	KeywordNan_sql,
 	KeywordNo,
 	KeywordNone,
@@ -404,6 +419,7 @@ var keywords = NewSet(
 	KeywordOr,
 	KeywordOrder,
 	KeywordOuter,
+	KeywordOverridable,
 	KeywordOutfile,
 	KeywordOver,
 	KeywordPartition,
@@ -428,6 +444,7 @@ var keywords = NewSet(
 	KeywordRemove,
 	KeywordRename,
 	KeywordReplace,
+	KeywordReset,
 	KeywordReplica,
 	KeywordReplicated,
 	KeywordReplication,
@@ -445,12 +462,15 @@ var keywords = NewSet(
 	KeywordServer,
 	KeywordSet,
 	KeywordSets,
+	KeywordSetting,
 	KeywordSettings,
 	KeywordShow,
 	KeywordShutdown,
 	KeywordSkip,
 	KeywordSource,
 	KeywordStart,
+	KeywordStaleness,
+	KeywordStep,
 	KeywordStop,
 	KeywordSubstring,
 	KeywordSync,
@@ -480,7 +500,9 @@ var keywords = NewSet(
 	KeywordUse,
 	KeywordUser,
 	KeywordUsing,
+	KeywordUntil,
 	KeywordUuid,
+	KeywordValid,
 	KeywordValues,
 	KeywordView,
 	KeywordVolume,

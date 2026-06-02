@@ -34,6 +34,7 @@
       }
     },
     "TableSchema": null,
+    "Comment": null,
     "SubQuery": {
       "HasParen": true,
       "Select": {
@@ -42,6 +43,7 @@
         "With": null,
         "Top": null,
         "HasDistinct": false,
+        "DistinctOn": null,
         "SelectItems": [
           {
             "Expr": {
@@ -87,7 +89,6 @@
             "HasFinal": false
           }
         },
-        "ArrayJoin": null,
         "Window": null,
         "Prewhere": null,
         "Where": null,

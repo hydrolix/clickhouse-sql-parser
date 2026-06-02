@@ -219,12 +219,15 @@
               }
             },
             "Alias": null,
-            "Direction": ""
+            "Direction": "",
+            "Fill": null
           }
-        ]
+        ],
+        "Interpolate": null
       }
     },
     "SubQuery": null,
+    "TableFunction": null,
     "HasTemporary": false,
     "Comment": null
   }

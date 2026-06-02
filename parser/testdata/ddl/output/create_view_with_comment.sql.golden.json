@@ -1,0 +1,172 @@
+[
+  {
+    "CreatePos": 0,
+    "StatementEnd": 156,
+    "OrReplace": false,
+    "Name": {
+      "Database": {
+        "Name": "db",
+        "QuoteType": 1,
+        "NamePos": 26,
+        "NameEnd": 28
+      },
+      "Table": {
+        "Name": "my_view",
+        "QuoteType": 1,
+        "NamePos": 29,
+        "NameEnd": 36
+      }
+    },
+    "IfNotExists": true,
+    "UUID": null,
+    "OnCluster": null,
+    "TableSchema": {
+      "SchemaPos": 37,
+      "SchemaEnd": 73,
+      "Columns": [
+        {
+          "NamePos": 44,
+          "ColumnEnd": 53,
+          "Name": {
+            "Ident": {
+              "Name": "id",
+              "QuoteType": 3,
+              "NamePos": 44,
+              "NameEnd": 46
+            },
+            "DotIdent": null
+          },
+          "Type": {
+            "Name": {
+              "Name": "Int64",
+              "QuoteType": 1,
+              "NamePos": 48,
+              "NameEnd": 53
+            }
+          },
+          "NotNull": null,
+          "Nullable": null,
+          "DefaultExpr": null,
+          "MaterializedExpr": null,
+          "AliasExpr": null,
+          "Codec": null,
+          "TTL": null,
+          "Comment": null,
+          "CompressionCodec": null
+        },
+        {
+          "NamePos": 60,
+          "ColumnEnd": 72,
+          "Name": {
+            "Ident": {
+              "Name": "name",
+              "QuoteType": 3,
+              "NamePos": 60,
+              "NameEnd": 64
+            },
+            "DotIdent": null
+          },
+          "Type": {
+            "Name": {
+              "Name": "String",
+              "QuoteType": 1,
+              "NamePos": 66,
+              "NameEnd": 72
+            }
+          },
+          "NotNull": null,
+          "Nullable": null,
+          "DefaultExpr": null,
+          "MaterializedExpr": null,
+          "AliasExpr": null,
+          "Codec": null,
+          "TTL": null,
+          "Comment": null,
+          "CompressionCodec": null
+        }
+      ],
+      "AliasTable": null,
+      "TableFunction": null
+    },
+    "Comment": {
+      "LiteralPos": 84,
+      "LiteralEnd": 111,
+      "Literal": "{\"blueprint_hash\":\"abc123\"}"
+    },
+    "SubQuery": {
+      "HasParen": false,
+      "Select": {
+        "SelectPos": 116,
+        "StatementEnd": 156,
+        "With": null,
+        "Top": null,
+        "HasDistinct": false,
+        "DistinctOn": null,
+        "SelectItems": [
+          {
+            "Expr": {
+              "Name": "id",
+              "QuoteType": 1,
+              "NamePos": 127,
+              "NameEnd": 129
+            },
+            "Modifiers": [],
+            "Alias": null
+          },
+          {
+            "Expr": {
+              "Name": "name",
+              "QuoteType": 1,
+              "NamePos": 135,
+              "NameEnd": 139
+            },
+            "Modifiers": [],
+            "Alias": null
+          }
+        ],
+        "From": {
+          "FromPos": 140,
+          "Expr": {
+            "Table": {
+              "TablePos": 145,
+              "TableEnd": 156,
+              "Alias": null,
+              "Expr": {
+                "Database": {
+                  "Name": "db",
+                  "QuoteType": 1,
+                  "NamePos": 145,
+                  "NameEnd": 147
+                },
+                "Table": {
+                  "Name": "my_table",
+                  "QuoteType": 1,
+                  "NamePos": 148,
+                  "NameEnd": 156
+                }
+              },
+              "HasFinal": false
+            },
+            "StatementEnd": 156,
+            "SampleRatio": null,
+            "HasFinal": false
+          }
+        },
+        "Window": null,
+        "Prewhere": null,
+        "Where": null,
+        "GroupBy": null,
+        "WithTotal": false,
+        "Having": null,
+        "OrderBy": null,
+        "LimitBy": null,
+        "Limit": null,
+        "Settings": null,
+        "Format": null,
+        "UnionAll": null,
+        "UnionDistinct": null,
+        "Except": null
+      }
+    }
+  }
+]

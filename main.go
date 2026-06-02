@@ -10,20 +10,22 @@ import (
 	clickhouse "github.com/AfterShip/clickhouse-sql-parser/parser"
 )
 
-const VERSION = "0.3.8"
+const VERSION = "0.4.17"
 const help = `
-Usage: clickhouse-sql-parser [YOUR SQL STRING] -f [YOUR SQL FILE] -format
+Usage: clickhouse-sql-parser [YOUR SQL STRING] -f [YOUR SQL FILE] -format -beautify
 `
 
 var options struct {
-	help    bool
-	file    string
-	format  bool
-	version bool
+	help     bool
+	file     string
+	format   bool
+	beautify bool
+	version  bool
 }
 
 func init() {
-	flag.BoolVar(&options.format, "format", false, "Beautify print the ClickHouse SQL")
+	flag.BoolVar(&options.format, "format", false, "Print formatted ClickHouse SQL")
+	flag.BoolVar(&options.beautify, "beautify", false, "Beautify print the ClickHouse SQL")
 	flag.StringVar(&options.file, "f", "", "Parse SQL from file")
 	flag.BoolVar(&options.help, "h", false, "Print help message")
 	flag.BoolVar(&options.version, "v", false, "Print version")
@@ -45,7 +47,8 @@ func main() {
 	if options.file != "" {
 		inputBytes, err = os.ReadFile(options.file)
 		if err != nil {
-			panic(fmt.Sprintf("read file error: %s", err.Error()))
+			fmt.Fprintf(os.Stderr, "read file error: %s\n", err.Error())
+			os.Exit(1)
 		}
 	} else {
 		if strings.HasPrefix(os.Args[len(os.Args)-1], "-") {
@@ -57,15 +60,22 @@ func main() {
 	parser := clickhouse.NewParser(string(inputBytes))
 	stmts, err := parser.ParseStmts()
 	if err != nil {
-		fmt.Printf("parse statements error: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "parse statements error: %s\n", err.Error())
 		os.Exit(1)
 	}
-	if !options.format { // print AST
+	if !options.format && !options.beautify { // print AST
 		bytes, _ := json.MarshalIndent(stmts, "", "  ") // nolint
 		fmt.Println(string(bytes))
 	} else { // format SQL
 		for _, stmt := range stmts {
-			fmt.Println(stmt.String())
+			if options.beautify {
+				formatter := clickhouse.NewFormatter()
+				formatter.WithBeautify()
+				formatter.WriteExpr(stmt)
+				fmt.Println(formatter.String())
+			} else {
+				fmt.Println(clickhouse.Format(stmt))
+			}
 		}
 	}
 }

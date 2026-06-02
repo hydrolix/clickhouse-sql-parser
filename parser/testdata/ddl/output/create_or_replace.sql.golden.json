@@ -309,12 +309,15 @@
               "ColumnArgList": null
             },
             "Alias": null,
-            "Direction": ""
+            "Direction": "",
+            "Fill": null
           }
-        ]
+        ],
+        "Interpolate": null
       }
     },
     "SubQuery": null,
+    "TableFunction": null,
     "HasTemporary": false,
     "Comment": {
       "LiteralPos": 372,
@@ -406,6 +409,7 @@
       "AliasTable": null,
       "TableFunction": null
     },
+    "Comment": null,
     "SubQuery": {
       "HasParen": false,
       "Select": {
@@ -414,6 +418,7 @@
         "With": null,
         "Top": null,
         "HasDistinct": false,
+        "DistinctOn": null,
         "SelectItems": [
           {
             "Expr": {
@@ -459,7 +464,6 @@
             "HasFinal": false
           }
         },
-        "ArrayJoin": null,
         "Window": null,
         "Prewhere": null,
         "Where": null,

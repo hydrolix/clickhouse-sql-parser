@@ -5,6 +5,7 @@
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -88,6 +89,7 @@
           "OverExpr": {
             "LeftParenPos": 57,
             "RightParenPos": 89,
+            "WindowName": null,
             "PartitionBy": {
               "PartitionPos": 57,
               "Expr": {
@@ -120,9 +122,11 @@
                     "NameEnd": 85
                   },
                   "Alias": null,
-                  "Direction": "ASC"
+                  "Direction": "ASC",
+                  "Fill": null
                 }
-              ]
+              ],
+              "Interpolate": null
             },
             "Frame": null
           }
@@ -164,7 +168,6 @@
         "HasFinal": false
       }
     },
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": {

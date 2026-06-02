@@ -5,6 +5,7 @@
     "With": null,
     "Top": null,
     "HasDistinct": false,
+    "DistinctOn": null,
     "SelectItems": [
       {
         "Expr": {
@@ -29,7 +30,6 @@
       }
     ],
     "From": null,
-    "ArrayJoin": null,
     "Window": null,
     "Prewhere": null,
     "Where": null,

@@ -3,6 +3,8 @@ package parser
 import (
 	"errors"
 	"fmt"
+
+	"slices"
 )
 
 func (p *Parser) tryParseWithClause(pos Pos) (*WithClause, error) {
@@ -68,6 +70,49 @@ func (p *Parser) parseTopClause(pos Pos) (*TopClause, error) {
 		TopEnd:   topEnd,
 		Number:   number,
 		WithTies: withTies,
+	}, nil
+}
+
+func (p *Parser) tryParseDistinctOn(pos Pos) (*DistinctOn, error) {
+	if !p.matchKeyword(KeywordOn) {
+		return nil, nil
+	}
+	return p.parseDistinctOn(pos)
+}
+
+func (p *Parser) parseDistinctOn(pos Pos) (*DistinctOn, error) {
+	if err := p.expectKeyword(KeywordOn); err != nil {
+		return nil, err
+	}
+
+	if err := p.expectTokenKind(TokenKindLParen); err != nil {
+		return nil, err
+	}
+
+	col, err := p.ParseNestedIdentifier(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	idents := []*NestedIdentifier{col}
+
+	for p.matchTokenKind(TokenKindComma) {
+		_ = p.lexer.consumeToken()
+
+		col, err = p.ParseNestedIdentifier(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		idents = append(idents, col)
+	}
+
+	if err := p.expectTokenKind(TokenKindRParen); err != nil {
+		return nil, err
+	}
+
+	return &DistinctOn{
+		Idents:        idents,
+		DistinctOnPos: pos,
+		DistinctOnEnd: p.Pos(),
 	}, nil
 }
 
@@ -153,11 +198,11 @@ func (p *Parser) parseJoinOp(_ Pos) []string {
 	case p.matchKeyword(KeywordInner):
 		modifiers = append(modifiers, p.last().String)
 		_ = p.lexer.consumeToken()
-		if p.matchKeyword(KeywordAll) || p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAsof) {
+		if p.matchKeyword(KeywordAll) || p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAsof) || p.matchKeyword(KeywordArray) {
 			modifiers = append(modifiers, p.last().String)
 			_ = p.lexer.consumeToken()
 		}
-	case p.matchKeyword(KeywordLeft), p.matchKeyword(KeywordRight):
+	case p.matchKeyword(KeywordLeft):
 		modifiers = append(modifiers, p.last().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordOuter) {
@@ -167,6 +212,19 @@ func (p *Parser) parseJoinOp(_ Pos) []string {
 		if p.matchKeyword(KeywordSemi) || p.matchKeyword(KeywordAnti) ||
 			p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAll) ||
 			p.matchKeyword(KeywordAsof) || p.matchKeyword(KeywordArray) {
+			modifiers = append(modifiers, p.last().String)
+			_ = p.lexer.consumeToken()
+		}
+	case p.matchKeyword(KeywordRight):
+		modifiers = append(modifiers, p.last().String)
+		_ = p.lexer.consumeToken()
+		if p.matchKeyword(KeywordOuter) {
+			modifiers = append(modifiers, p.last().String)
+			_ = p.lexer.consumeToken()
+		}
+		if p.matchKeyword(KeywordSemi) || p.matchKeyword(KeywordAnti) ||
+			p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAll) ||
+			p.matchKeyword(KeywordAsof) {
 			modifiers = append(modifiers, p.last().String)
 			_ = p.lexer.consumeToken()
 		}
@@ -181,13 +239,16 @@ func (p *Parser) parseJoinOp(_ Pos) []string {
 			modifiers = append(modifiers, p.last().String)
 			_ = p.lexer.consumeToken()
 		}
+	case p.matchKeyword(KeywordArray):
+		modifiers = append(modifiers, p.last().String)
+		_ = p.lexer.consumeToken()
 	}
 	return modifiers
 }
 
 func (p *Parser) parseJoinTableExpr(_ Pos) (Expr, error) {
 	switch {
-	case p.matchTokenKind(TokenKindIdent), p.matchTokenKind(TokenKindLParen):
+	case p.matchTokenKind(TokenKindIdent), p.matchTokenKind(TokenKindString), p.matchTokenKind(TokenKindLParen):
 		tableExpr, err := p.parseTableExpr(p.Pos())
 		if err != nil {
 			return nil, err
@@ -238,6 +299,30 @@ func (p *Parser) parseJoinRightExpr(pos Pos) (expr Expr, err error) {
 	}
 
 	modifiers = append(modifiers, KeywordJoin)
+
+	// Check if this is an ARRAY JOIN
+	if slices.Contains(modifiers, KeywordArray) {
+		// For ARRAY JOIN, parse column expression list instead of table expression
+		expr, err = p.parseColumnExprList(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+
+		// ARRAY JOIN doesn't have constraints (ON/USING)
+		// try parse next join
+		rightExpr, err = p.parseJoinRightExpr(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return &JoinExpr{
+			JoinPos:     pos,
+			Left:        expr,
+			Right:       rightExpr,
+			Modifiers:   modifiers,
+			Constraints: nil,
+		}, nil
+	}
+
 	expr, err = p.parseJoinTableExpr(p.Pos())
 	if err != nil {
 		return nil, err
@@ -459,30 +544,42 @@ func (p *Parser) parseGroupByClause(pos Pos) (*GroupByClause, error) {
 	return groupBy, nil
 }
 
-func (p *Parser) tryParseLimitClause(pos Pos) (*LimitClause, error) {
+func (p *Parser) tryParseLimitAfterLimitByClause(pos Pos) (*LimitClause, error) {
 	if !p.matchKeyword(KeywordLimit) {
 		return nil, nil
 	}
+
+	return p.parseLimitClause(pos)
+}
+
+func (p *Parser) tryParseLimitClause(pos Pos) (*LimitClause, error) {
+	if !p.matchKeyword(KeywordLimit) && !p.matchKeyword(KeywordOffset) {
+		return nil, nil
+	}
+
 	return p.parseLimitClause(pos)
 }
 
 func (p *Parser) parseLimitClause(pos Pos) (*LimitClause, error) {
-	if err := p.expectKeyword(KeywordLimit); err != nil {
-		return nil, err
-	}
-
-	limit, err := p.parseExpr(p.Pos())
-	if err != nil {
-		return nil, err
-	}
-
+	var limit Expr
 	var offset Expr
-	if p.tryConsumeKeywords(KeywordOffset) {
-		offset, err = p.parseExpr(p.Pos())
-	} else if p.tryConsumeTokenKind(TokenKindComma) != nil {
-		offset = limit
+	var err error
+	if p.tryConsumeKeywords(KeywordLimit) {
 		limit, err = p.parseExpr(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+
+		if p.tryConsumeKeywords(KeywordOffset) {
+			offset, err = p.parseExpr(p.Pos())
+		} else if p.tryConsumeTokenKind(TokenKindComma) != nil {
+			offset = limit
+			limit, err = p.parseExpr(p.Pos())
+		}
+	} else if p.tryConsumeKeywords(KeywordOffset) {
+		offset, err = p.parseExpr(p.Pos())
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -560,86 +657,160 @@ func (p *Parser) parseWindowFrameClause(pos Pos) (*WindowFrameClause, error) {
 	if p.matchKeyword(KeywordRows) || p.matchKeyword(KeywordRange) {
 		windowFrameType = p.last().String
 		_ = p.lexer.consumeToken()
+	} else {
+		return nil, fmt.Errorf("expected ROWS or RANGE for window frame")
 	}
 
 	var expr Expr
-	switch {
-	case p.tryConsumeKeywords(KeywordBetween):
-		betweenWindowFrame, err := p.parseWindowFrameClause(p.Pos())
+	if p.tryConsumeKeywords(KeywordBetween) {
+		left, err := p.parseFrameExtent()
 		if err != nil {
 			return nil, err
 		}
-
 		andPos := p.Pos()
 		if err := p.expectKeyword(KeywordAnd); err != nil {
 			return nil, err
 		}
-
-		andWindowFrame, err := p.parseWindowFrameClause(p.Pos())
+		right, err := p.parseFrameExtent()
 		if err != nil {
 			return nil, err
 		}
 		expr = &BetweenClause{
-			Between: betweenWindowFrame,
+			Between: left,
 			AndPos:  andPos,
-			And:     andWindowFrame,
+			And:     right,
 		}
-	case p.matchKeyword(KeywordCurrent):
-		currentPos := p.Pos()
-		_ = p.lexer.consumeToken()
-		rowEnd := p.End()
-		if err := p.expectKeyword(KeywordRow); err != nil {
-			return nil, err
-		}
-		expr = &WindowFrameCurrentRow{
-			CurrentPos: currentPos,
-			RowEnd:     rowEnd,
-		}
-	case p.matchKeyword(KeywordUnbounded):
-		unboundedPos := p.Pos()
-		_ = p.lexer.consumeToken()
-
-		direction := ""
-		switch {
-		case p.matchKeyword(KeywordPreceding), p.matchKeyword(KeywordFollowing):
-			direction = p.last().String
-			_ = p.lexer.consumeToken()
-		default:
-			return nil, fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
-		}
-		expr = &WindowFrameUnbounded{
-			UnboundedPos: unboundedPos,
-			Direction:    direction,
-		}
-	case p.matchTokenKind(TokenKindInt):
-		number, err := p.parseNumber(p.Pos())
+	} else {
+		// single extent
+		extent, err := p.parseFrameExtent()
 		if err != nil {
 			return nil, err
 		}
-
-		var unboundedEnd Pos
-		direction := ""
-		switch {
-		case p.matchKeyword(KeywordPreceding), p.matchKeyword(KeywordFollowing):
-			direction = p.last().String
-			unboundedEnd = p.End()
-			_ = p.lexer.consumeToken()
-		default:
-			return nil, fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
-		}
-		expr = &WindowFrameNumber{
-			UnboundedEnd: unboundedEnd,
-			Number:       number,
-			Direction:    direction,
-		}
-	default:
-		return nil, fmt.Errorf("expected BETWEEN, CURRENT, UNBOUNDED or integer, got %s", p.lastTokenKind())
+		expr = extent
 	}
+
 	return &WindowFrameClause{
 		FramePos: pos,
 		Type:     windowFrameType,
 		Extend:   expr,
 	}, nil
+}
+
+// parseFrameExtent parses a single frame extent
+func (p *Parser) parseFrameExtent() (Expr, error) {
+	switch {
+	case p.matchKeyword(KeywordCurrent):
+		return p.parseFrameCurrentRow()
+	case p.matchKeyword(KeywordUnbounded):
+		return p.parseFrameUnbounded()
+	case p.matchTokenKind(TokenKindInt):
+		return p.parseFrameNumber()
+	case p.matchTokenKind(TokenKindLBrace):
+		return p.parseFrameParam()
+	case p.matchKeyword(KeywordInterval):
+		return p.parseFrameInterval()
+	default:
+		return nil, fmt.Errorf("expected UNBOUNDED, CURRENT ROW, integer, parameter, or interval")
+	}
+}
+
+func (p *Parser) parseFrameCurrentRow() (Expr, error) {
+	currentPos := p.Pos()
+	_ = p.lexer.consumeToken()
+	if err := p.expectKeyword(KeywordRow); err != nil {
+		return nil, err
+	}
+	rowEnd := p.End()
+	return &WindowFrameCurrentRow{
+		CurrentPos: currentPos,
+		RowEnd:     rowEnd,
+	}, nil
+}
+
+func (p *Parser) parseFrameUnbounded() (Expr, error) {
+	unboundedPos := p.Pos()
+	_ = p.lexer.consumeToken()
+
+	direction, err := p.parseFrameDirection()
+	if err != nil {
+		return nil, err
+	}
+	return &WindowFrameUnbounded{
+		UnboundedPos: unboundedPos,
+		Direction:    direction,
+	}, nil
+}
+
+func (p *Parser) parseFrameNumber() (Expr, error) {
+	number, err := p.parseNumber(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	direction, endPos, err := p.parseFrameDirectionWithEnd()
+	if err != nil {
+		return nil, err
+	}
+	return &WindowFrameNumber{
+		EndPos:    endPos,
+		Number:    number,
+		Direction: direction,
+	}, nil
+}
+
+func (p *Parser) parseFrameParam() (Expr, error) {
+	queryParam, err := p.parseQueryParam(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	direction, endPos, err := p.parseFrameDirectionWithEnd()
+	if err != nil {
+		return nil, err
+	}
+	return &WindowFrameParam{
+		Param:     queryParam,
+		EndPos:    endPos,
+		Direction: direction,
+	}, nil
+}
+
+func (p *Parser) parseFrameInterval() (Expr, error) {
+	intervalExpr, err := p.parseInterval(true)
+	if err != nil {
+		return nil, err
+	}
+
+	direction, endPos, err := p.parseFrameDirectionWithEnd()
+	if err != nil {
+		return nil, err
+	}
+	return &WindowFrameExtendExpr{
+		Expr:      intervalExpr,
+		Direction: direction,
+		EndPos:    endPos,
+	}, nil
+}
+
+func (p *Parser) parseFrameDirection() (string, error) {
+	switch {
+	case p.matchKeyword(KeywordPreceding), p.matchKeyword(KeywordFollowing):
+		direction := p.last().String
+		_ = p.lexer.consumeToken()
+		return direction, nil
+	default:
+		return "", fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
+	}
+}
+
+func (p *Parser) parseFrameDirectionWithEnd() (string, Pos, error) {
+	if !p.matchKeyword(KeywordPreceding) && !p.matchKeyword(KeywordFollowing) {
+		return "", 0, fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
+	}
+	endPos := p.End()
+	direction := p.last().String
+	_ = p.lexer.consumeToken()
+	return direction, endPos, nil
 }
 
 func (p *Parser) tryParseWindowClause(pos Pos) (*WindowClause, error) {
@@ -652,6 +823,14 @@ func (p *Parser) tryParseWindowClause(pos Pos) (*WindowClause, error) {
 func (p *Parser) parseWindowCondition(pos Pos) (*WindowExpr, error) {
 	if err := p.expectTokenKind(TokenKindLParen); err != nil {
 		return nil, err
+	}
+	var windowName *Ident
+	if p.canParseWindowNameInParens() {
+		var err error
+		windowName, err = p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
 	}
 	partitionBy, err := p.tryParsePartitionByClause(pos)
 	if err != nil {
@@ -672,10 +851,39 @@ func (p *Parser) parseWindowCondition(pos Pos) (*WindowExpr, error) {
 	return &WindowExpr{
 		LeftParenPos:  pos,
 		RightParenPos: rightParenPos,
+		WindowName:    windowName,
 		PartitionBy:   partitionBy,
 		OrderBy:       orderBy,
 		Frame:         frame,
 	}, nil
+}
+
+func (p *Parser) canParseWindowNameInParens() bool {
+	if !p.matchTokenKind(TokenKindIdent) {
+		return false
+	}
+	if !p.matchTokenKind(TokenKindKeyword) {
+		return true
+	}
+
+	savedState := p.lexer.saveState()
+	defer p.lexer.restoreState(savedState)
+
+	switch {
+	case p.matchKeyword(KeywordPartition), p.matchKeyword(KeywordOrder):
+		_ = p.lexer.consumeToken()
+		return !p.matchKeyword(KeywordBy)
+	case p.matchKeyword(KeywordRows), p.matchKeyword(KeywordRange):
+		_ = p.lexer.consumeToken()
+		return !p.matchKeyword(KeywordBetween) &&
+			!p.matchKeyword(KeywordCurrent) &&
+			!p.matchKeyword(KeywordUnbounded) &&
+			!p.matchTokenKind(TokenKindInt) &&
+			!p.matchTokenKind(TokenKindLBrace) &&
+			!p.matchKeyword(KeywordInterval)
+	default:
+		return true
+	}
 }
 
 func (p *Parser) parseWindowClause(pos Pos) (*WindowClause, error) {
@@ -683,59 +891,43 @@ func (p *Parser) parseWindowClause(pos Pos) (*WindowClause, error) {
 		return nil, err
 	}
 
-	windowName, err := p.parseIdent()
-	if err != nil {
-		return nil, err
+	windows := make([]*WindowDefinition, 0, 1)
+	for {
+		windowName, err := p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+
+		asPos := p.Pos()
+		if err := p.expectKeyword(KeywordAs); err != nil {
+			return nil, err
+		}
+
+		condition, err := p.parseWindowCondition(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+
+		windows = append(windows, &WindowDefinition{
+			Name:  windowName,
+			AsPos: asPos,
+			Expr:  condition,
+		})
+
+		if p.tryConsumeTokenKind(TokenKindComma) == nil {
+			break
+		}
 	}
 
-	if err := p.expectKeyword(KeywordAs); err != nil {
-		return nil, err
-	}
-
-	condition, err := p.parseWindowCondition(p.Pos())
-	if err != nil {
-		return nil, err
+	var endPos Pos
+	if len(windows) > 0 {
+		endPos = windows[len(windows)-1].End()
 	}
 
 	return &WindowClause{
-		WindowPos:  pos,
-		Name:       windowName,
-		WindowExpr: condition,
-	}, nil
-}
-
-func (p *Parser) tryParseArrayJoinClause(pos Pos) (*ArrayJoinClause, error) {
-	if !p.matchKeyword(KeywordLeft) && !p.matchKeyword(KeywordInner) && !p.matchKeyword(KeywordArray) {
-		return nil, nil
-	}
-	return p.parseArrayJoinClause(pos)
-}
-
-func (p *Parser) parseArrayJoinClause(_ Pos) (*ArrayJoinClause, error) {
-	var typ string
-	switch {
-	case p.matchKeyword(KeywordLeft), p.matchKeyword(KeywordInner):
-		typ = p.last().String
-		_ = p.lexer.consumeToken()
-	}
-	arrayPos := p.Pos()
-	if err := p.expectKeyword(KeywordArray); err != nil {
-		return nil, err
-	}
-
-	if err := p.expectKeyword(KeywordJoin); err != nil {
-		return nil, err
-	}
-
-	expr, err := p.parseColumnExprList(p.Pos())
-	if err != nil {
-		return nil, err
-	}
-
-	return &ArrayJoinClause{
-		ArrayPos: arrayPos,
-		Type:     typ,
-		Expr:     expr,
+		WindowPos: pos,
+		EndPos:    endPos,
+		Windows:   windows,
 	}, nil
 }
 
@@ -823,7 +1015,7 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 			}
 			selectStmt.UnionAll = unionAllExpr
 		case p.tryConsumeKeywords(KeywordDistinct):
-			unionDistinctExpr, err := p.parseSelectStmt(p.Pos())
+			unionDistinctExpr, err := p.parseSelectQuery(p.Pos())
 			if err != nil {
 				return nil, err
 			}
@@ -832,7 +1024,7 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 			return nil, fmt.Errorf("expected ALL or DISTINCT, got %s", p.lastTokenKind())
 		}
 	case p.tryConsumeKeywords(KeywordExcept):
-		exceptExpr, err := p.parseSelectStmt(p.Pos())
+		exceptExpr, err := p.parseSelectQuery(p.Pos())
 		if err != nil {
 			return nil, err
 		}
@@ -856,6 +1048,10 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 	}
 	// DISTINCT?
 	hasDistinct := p.tryConsumeKeywords(KeywordDistinct)
+	distinctOn, err := p.tryParseDistinctOn(p.Pos())
+	if err != nil {
+		return nil, err
+	}
 
 	top, err := p.tryParseTopClause(p.Pos())
 	if err != nil {
@@ -877,13 +1073,6 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 
 	if from != nil {
 		statementEnd = from.End()
-	}
-	arrayJoin, err := p.tryParseArrayJoinClause(p.Pos())
-	if err != nil {
-		return nil, err
-	}
-	if arrayJoin != nil {
-		statementEnd = arrayJoin.End()
 	}
 	prewhere, err := p.tryParsePrewhereClause(p.Pos())
 	if err != nil {
@@ -948,7 +1137,7 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 		switch e := parsedLimitBy.(type) {
 		case *LimitByClause:
 			limitBy = e
-			limit, err = p.tryParseLimitClause(p.Pos())
+			limit, err = p.tryParseLimitAfterLimitByClause(p.Pos())
 			if err != nil {
 				return nil, err
 			}
@@ -957,6 +1146,14 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 			}
 		case *LimitClause:
 			limit = e
+		}
+	} else {
+		limit, err = p.tryParseLimitClause(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		if limit != nil {
+			statementEnd = limit.End()
 		}
 	}
 
@@ -982,9 +1179,9 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 		StatementEnd: statementEnd,
 		Top:          top,
 		HasDistinct:  hasDistinct,
+		DistinctOn:   distinctOn,
 		SelectItems:  selectItems,
 		From:         from,
-		ArrayJoin:    arrayJoin,
 		Window:       window,
 		Prewhere:     prewhere,
 		Where:        where,
@@ -1028,34 +1225,6 @@ func (p *Parser) parseCTEStmt(pos Pos) (*CTEStmt, error) {
 		Expr:   expr,
 		Alias:  name,
 	}, nil
-}
-
-func (p *Parser) tryParseColumnAliases() ([]*Ident, error) {
-	if !p.matchTokenKind(TokenKindLParen) {
-		return nil, nil
-	}
-	if err := p.expectTokenKind(TokenKindLParen); err != nil {
-		return nil, err
-	}
-
-	aliasList := make([]*Ident, 0)
-	for {
-		ident, err := p.parseIdent()
-		if err != nil {
-			return nil, err
-		}
-		aliasList = append(aliasList, ident)
-		if p.matchTokenKind(TokenKindRParen) {
-			break
-		}
-		if err := p.expectTokenKind(TokenKindComma); err != nil {
-			return nil, err
-		}
-	}
-	if err := p.expectTokenKind(TokenKindRParen); err != nil {
-		return nil, err
-	}
-	return aliasList, nil
 }
 
 func (p *Parser) tryParseSampleClause(pos Pos) (*SampleClause, error) {

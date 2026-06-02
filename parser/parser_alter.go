@@ -51,8 +51,14 @@ func (p *Parser) parseAlterTable(pos Pos) (*AlterTable, error) {
 			alter, err = p.parseAlterTableReplacePartition(p.Pos())
 		case p.matchKeyword(KeywordMaterialize):
 			alter, err = p.parseAlterTableMaterialize(p.Pos())
+		case p.matchKeyword(KeywordReset):
+			alter, err = p.parseAlterTableReset(p.Pos())
+		case p.matchKeyword(KeywordDelete):
+			alter, err = p.parseAlterTableDelete(p.Pos())
+		case p.matchKeyword(KeywordUpdate):
+			alter, err = p.parseAlterTableUpdate(p.Pos())
 		default:
-			return nil, errors.New("expected token: ADD|DROP|ATTACH|DETACH|FREEZE|REMOVE|CLEAR")
+			return nil, errors.New("expected token: ADD|DROP|ATTACH|DETACH|FREEZE|REMOVE|CLEAR|MODIFY|REPLACE|MATERIALIZE|RESET|DELETE|UPDATE")
 		}
 		if err != nil {
 			return nil, err
@@ -111,12 +117,21 @@ func (p *Parser) parseAlterTableAddColumn(pos Pos) (*AlterTableAddColumn, error)
 		statementEnd = after.End()
 	}
 
+	settings, err := p.tryParseSettingsClause(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	if settings != nil {
+		statementEnd = settings.End()
+	}
+
 	return &AlterTableAddColumn{
 		AddPos:       pos,
 		StatementEnd: statementEnd,
 		Column:       column,
 		IfNotExists:  ifNotExists,
 		After:        after,
+		Settings:     settings,
 	}, nil
 }
 
@@ -206,7 +221,12 @@ func (p *Parser) parseProjectionSelect(pos Pos) (*ProjectionSelectStmt, error) {
 	}, nil
 }
 
-func (p *Parser) parseTableProjection(pos Pos) (*TableProjection, error) {
+func (p *Parser) parseTableProjection(pos Pos, includeProjectionKeyword bool) (*TableProjection, error) {
+	if includeProjectionKeyword {
+		if err := p.expectKeyword(KeywordProjection); err != nil {
+			return nil, err
+		}
+	}
 	identifier, err := p.ParseNestedIdentifier(pos)
 	if err != nil {
 		return nil, err
@@ -216,9 +236,10 @@ func (p *Parser) parseTableProjection(pos Pos) (*TableProjection, error) {
 		return nil, err
 	}
 	return &TableProjection{
-		ProjectionPos: pos,
-		Identifier:    identifier,
-		Select:        selectExpr,
+		IncludeProjectionKeyword: includeProjectionKeyword,
+		ProjectionPos:            pos,
+		Identifier:               identifier,
+		Select:                   selectExpr,
 	}, nil
 }
 
@@ -231,7 +252,7 @@ func (p *Parser) parseAlterTableAddProjection(pos Pos) (*AlterTableAddProjection
 	if err != nil {
 		return nil, err
 	}
-	tableProjection, err := p.parseTableProjection(p.Pos())
+	tableProjection, err := p.parseTableProjection(p.Pos(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -624,26 +645,52 @@ func (p *Parser) parseAlterTableModify(pos Pos) (AlterTableClause, error) {
 	case p.matchKeyword(KeywordColumn):
 		return p.parseAlterTableModifyColumn(pos)
 	case p.matchKeyword(KeywordTtl):
+		ttlPos := p.Pos()
 		_ = p.lexer.consumeToken()
-		ttlExpr, err := p.parseTTLExpr(p.Pos())
+		items, err := p.parseTTLClause(ttlPos, true)
 		if err != nil {
 			return nil, err
 		}
+		listEnd := ttlPos
+		if len(items) > 0 {
+			listEnd = items[len(items)-1].End()
+		}
+		ttlClause := &TTLClause{
+			TTLPos:  ttlPos,
+			ListEnd: listEnd,
+			Items:   items,
+		}
 		return &AlterTableModifyTTL{
 			ModifyPos:    pos,
-			StatementEnd: ttlExpr.End(),
-			TTL:          ttlExpr,
+			StatementEnd: ttlClause.End(),
+			TTL:          ttlClause,
 		}, nil
 	case p.matchKeyword(KeywordQuery):
 		_ = p.lexer.consumeToken()
-		selectQuery, _ := p.parseSelectQuery(pos)
+		selectQuery, err := p.parseSelectQuery(pos)
+		if err != nil {
+			return nil, err
+		}
 		return &AlterTableModifyQuery{
 			ModifyPos:    pos,
 			StatementEnd: selectQuery.End(),
 			SelectExpr:   selectQuery,
 		}, nil
+	case p.matchKeyword(KeywordSetting):
+		_ = p.lexer.consumeToken() // consume "SETTING"
+		settings, err := p.parseSettingsList(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		// settings must not be empty
+		statementEnd := settings[len(settings)-1].End()
+		return &AlterTableModifySetting{
+			ModifyPos:    pos,
+			StatementEnd: statementEnd,
+			Settings:     settings,
+		}, nil
 	default:
-		return nil, fmt.Errorf("expected keyword: COLUMN|TTL|QUERY, but got %q",
+		return nil, fmt.Errorf("expected keyword: COLUMN|TTL|QUERY|SETTING, but got %q",
 			p.last().String)
 	}
 
@@ -776,5 +823,135 @@ func (p *Parser) parseAlterTableMaterialize(pos Pos) (AlterTableClause, error) {
 		IfExists:        ifExists,
 		ProjectionName:  name,
 		Partition:       partition,
+	}, nil
+}
+
+func (p *Parser) parseAlterTableReset(pos Pos) (AlterTableClause, error) {
+	if err := p.expectKeyword(KeywordReset); err != nil {
+		return nil, err
+	}
+
+	if err := p.expectKeyword(KeywordSetting); err != nil {
+		return nil, err
+	}
+
+	// Parse comma-separated setting names inline
+	var settings []*Ident
+	setting, err := p.parseIdent()
+	if err != nil {
+		return nil, err
+	}
+	settings = append(settings, setting)
+
+	for p.tryConsumeTokenKind(TokenKindComma) != nil {
+		setting, err = p.parseIdent()
+		if err != nil {
+			return nil, err
+		}
+		settings = append(settings, setting)
+	}
+
+	statementEnd := settings[len(settings)-1].End()
+
+	return &AlterTableResetSetting{
+		ResetPos:     pos,
+		StatementEnd: statementEnd,
+		Settings:     settings,
+	}, nil
+}
+
+// Syntax: ALTER TABLE DELETE WHERE condition
+func (p *Parser) parseAlterTableDelete(pos Pos) (AlterTableClause, error) {
+	if err := p.expectKeyword(KeywordDelete); err != nil {
+		return nil, err
+	}
+
+	if err := p.expectKeyword(KeywordWhere); err != nil {
+		return nil, err
+	}
+
+	whereExpr, err := p.parseExpr(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	return &AlterTableDelete{
+		DeletePos:    pos,
+		StatementEnd: whereExpr.End(),
+		WhereClause:  whereExpr,
+	}, nil
+}
+
+// Syntax: ALTER TABLE UPDATE column1 = expr1 [, column2 = expr2, ...] [IN PARTITION partition_id] WHERE condition
+func (p *Parser) parseAlterTableUpdate(pos Pos) (AlterTableClause, error) {
+	if err := p.expectKeyword(KeywordUpdate); err != nil {
+		return nil, err
+	}
+
+	// Parse at least one assignment
+	assignments := make([]*UpdateAssignment, 0)
+	assignment, err := p.parseUpdateAssignment(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+	assignments = append(assignments, assignment)
+
+	// Parse additional comma-separated assignments
+	for p.tryConsumeTokenKind(TokenKindComma) != nil {
+		assignment, err = p.parseUpdateAssignment(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		assignments = append(assignments, assignment)
+	}
+
+	var inPartition *PartitionClause
+	if p.tryConsumeKeywords(KeywordIn) {
+		inPartition, err = p.parsePartitionClause(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := p.expectKeyword(KeywordWhere); err != nil {
+		return nil, err
+	}
+
+	whereExpr, err := p.parseExpr(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	return &AlterTableUpdate{
+		UpdatePos:    pos,
+		StatementEnd: whereExpr.End(),
+		Assignments:  assignments,
+		InPartition:  inPartition,
+		WhereClause:  whereExpr,
+	}, nil
+}
+
+// Parse column = expression assignment
+func (p *Parser) parseUpdateAssignment(pos Pos) (*UpdateAssignment, error) {
+	column, err := p.ParseNestedIdentifier(p.Pos())
+	if err != nil {
+		return nil, err
+	}
+
+	if err := p.expectTokenKind(TokenKindSingleEQ); err != nil {
+		return nil, err
+	}
+
+	// Why don't we use parseExpr here? Because `ALTER TABLE UPDATE` syntax allows to
+	// use `IN PARTITION` keywords after assignments. So we need to limit the precedence
+	// to avoid parsing `IN PARTITION` as part of the expression.
+	expr, err := p.parseSubExpr(p.Pos(), precedenceIn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &UpdateAssignment{
+		AssignmentPos: pos,
+		Column:        column,
+		Expr:          expr,
 	}, nil
 }
