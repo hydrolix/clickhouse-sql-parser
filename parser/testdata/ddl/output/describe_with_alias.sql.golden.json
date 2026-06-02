@@ -1,0 +1,32 @@
+[
+  {
+    "DescribePos": 0,
+    "StatementEnd": 17,
+    "DescribeType": "",
+    "Target": {
+      "TablePos": 9,
+      "TableEnd": 17,
+      "Alias": null,
+      "Expr": {
+        "Expr": {
+          "Database": null,
+          "Table": {
+            "Name": "foo",
+            "QuoteType": 1,
+            "NamePos": 9,
+            "NameEnd": 12
+          }
+        },
+        "AliasPos": 16,
+        "Alias": {
+          "Name": "f",
+          "QuoteType": 1,
+          "NamePos": 16,
+          "NameEnd": 17
+        }
+      },
+      "HasFinal": false
+    },
+    "Settings": null
+  }
+]

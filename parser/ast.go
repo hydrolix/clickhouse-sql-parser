@@ -6290,7 +6290,7 @@ type DescribeStmt struct {
 	DescribePos  Pos
 	StatementEnd Pos
 	DescribeType string // e.g., "TABLE", empty if not used
-	Target       *TableIdentifier
+	Target       *TableExpr
 	Settings     *SettingsClause
 }
 

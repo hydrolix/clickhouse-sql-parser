@@ -1,0 +1,72 @@
+[
+  {
+    "DescribePos": 0,
+    "StatementEnd": 31,
+    "DescribeType": "",
+    "Target": {
+      "TablePos": 9,
+      "TableEnd": 31,
+      "Alias": null,
+      "Expr": {
+        "HasParen": true,
+        "Select": {
+          "SelectPos": 10,
+          "StatementEnd": 31,
+          "With": null,
+          "Top": null,
+          "HasDistinct": false,
+          "DistinctOn": null,
+          "SelectItems": [
+            {
+              "Expr": {
+                "NumPos": 17,
+                "NumEnd": 18,
+                "Literal": "1",
+                "Base": 10
+              },
+              "Modifiers": [],
+              "Alias": {
+                "Name": "x",
+                "QuoteType": 1,
+                "NamePos": 22,
+                "NameEnd": 23
+              }
+            },
+            {
+              "Expr": {
+                "NumPos": 25,
+                "NumEnd": 26,
+                "Literal": "2",
+                "Base": 10
+              },
+              "Modifiers": [],
+              "Alias": {
+                "Name": "y",
+                "QuoteType": 1,
+                "NamePos": 30,
+                "NameEnd": 31
+              }
+            }
+          ],
+          "From": null,
+          "Window": null,
+          "Prewhere": null,
+          "Where": null,
+          "GroupBy": null,
+          "WithTotal": false,
+          "Having": null,
+          "OrderBy": null,
+          "LimitBy": null,
+          "Limit": null,
+          "Settings": null,
+          "Format": null,
+          "UnionAll": null,
+          "UnionDistinct": null,
+          "Except": null
+        }
+      },
+      "HasFinal": false
+    },
+    "Settings": null
+  }
+]

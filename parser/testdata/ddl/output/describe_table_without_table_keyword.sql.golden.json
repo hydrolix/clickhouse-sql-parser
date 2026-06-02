@@ -4,13 +4,19 @@
     "StatementEnd": 16,
     "DescribeType": "",
     "Target": {
-      "Database": null,
-      "Table": {
-        "Name": "mytable",
-        "QuoteType": 1,
-        "NamePos": 9,
-        "NameEnd": 16
-      }
+      "TablePos": 9,
+      "TableEnd": 16,
+      "Alias": null,
+      "Expr": {
+        "Database": null,
+        "Table": {
+          "Name": "mytable",
+          "QuoteType": 1,
+          "NamePos": 9,
+          "NameEnd": 16
+        }
+      },
+      "HasFinal": false
     },
     "Settings": null
   }

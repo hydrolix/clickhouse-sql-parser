@@ -486,3 +486,45 @@ func TestParser_Dashboard_Queries(t *testing.T) {
 	println("success", success)
 	println("fail", fail)
 }
+
+// Positive coverage for the broadened DESCRIBE-target grammar. Each SQL flips
+// from FAIL on the previous narrow `parseTableIdentifier` path to PASS on the
+// `parseTableExpr` path. Ordering matches design.md's "Acceptance surface"
+// table so a reviewer reading test output sees one category before moving to
+// the next. Three regression cases (`DESCRIBE TABLE foo`, `DESCRIBE foo
+// SETTINGS …`, `DESCRIBE db.foo`) lock the shapes that already parsed today.
+func TestParser_Describe_RichArguments(t *testing.T) {
+	validSQLs := []string{
+		"DESCRIBE (SELECT 1)",
+		"DESCRIBE (SELECT a, b FROM inner_table) AS subq",
+		"DESCRIBE foo AS f",
+		"DESCRIBE db.foo AS f",
+		"DESCRIBE numbers(10)",
+		"DESCRIBE remote('host', db.foo)",
+		"DESCRIBE foo FINAL",
+		"DESCRIBE foo SETTINGS describe_compact_output=1",
+		"DESCRIBE TABLE foo",
+		"DESCRIBE db.foo",
+		"DESCRIBE (SELECT 1) SETTINGS describe_compact_output=1",
+		"DESCRIBE (SELECT * FROM foo JOIN bar ON foo.x = bar.x)",
+	}
+	for _, sql := range validSQLs {
+		_, err := NewParser(sql).ParseStmts()
+		require.NoError(t, err, "Failed to parse: %s", sql)
+	}
+}
+
+// ClickHouse rejects bare JOIN at the DESCRIBE position — JOIN must be
+// wrapped in a subquery. This test locks the parser's matching rejection so
+// a future "let's just use parseJoinExpr" refactor cannot silently
+// re-introduce a parser-vs-server gap.
+func TestParser_Describe_RejectsJoin(t *testing.T) {
+	invalidSQLs := []string{
+		"DESCRIBE foo JOIN bar ON foo.x = bar.x",
+		"DESCRIBE foo LEFT JOIN bar ON foo.x = bar.x",
+	}
+	for _, sql := range invalidSQLs {
+		_, err := NewParser(sql).ParseStmts()
+		require.Error(t, err, "Expected DESCRIBE-with-JOIN to fail: %s", sql)
+	}
+}

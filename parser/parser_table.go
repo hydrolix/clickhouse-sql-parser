@@ -1660,7 +1660,7 @@ func (p *Parser) parseDescribeStmt(pos Pos) (*DescribeStmt, error) {
 		describeType = "TABLE"
 	}
 
-	tableIdent, err := p.parseTableIdentifier(p.Pos())
+	target, err := p.parseTableExpr(p.Pos())
 	if err != nil {
 		return nil, err
 	}
@@ -1670,7 +1670,7 @@ func (p *Parser) parseDescribeStmt(pos Pos) (*DescribeStmt, error) {
 		return nil, err
 	}
 
-	statementEnd := tableIdent.End()
+	statementEnd := target.End()
 	if settings != nil {
 		statementEnd = settings.End()
 	}
@@ -1679,7 +1679,7 @@ func (p *Parser) parseDescribeStmt(pos Pos) (*DescribeStmt, error) {
 		DescribePos:  pos,
 		StatementEnd: statementEnd,
 		DescribeType: describeType,
-		Target:       tableIdent,
+		Target:       target,
 		Settings:     settings,
 	}, nil
 }
