@@ -8,6 +8,30 @@ const (
 	OrderDirectionDesc OrderDirection = "DESC"
 )
 
+type UnionMode string
+
+const (
+	UnionModeNone     UnionMode = ""
+	UnionModeAll      UnionMode = "ALL"
+	UnionModeDistinct UnionMode = "DISTINCT"
+)
+
+type ExceptMode string
+
+const (
+	ExceptModeNone     ExceptMode = ""
+	ExceptModeAll      ExceptMode = "ALL"
+	ExceptModeDistinct ExceptMode = "DISTINCT"
+)
+
+type IntersectMode string
+
+const (
+	IntersectModeNone     IntersectMode = ""
+	IntersectModeAll      IntersectMode = "ALL"
+	IntersectModeDistinct IntersectMode = "DISTINCT"
+)
+
 type Expr interface {
 	Pos() Pos
 	End() Pos
@@ -5112,9 +5136,12 @@ type SelectQuery struct {
 	Limit         *LimitClause
 	Settings      *SettingsClause
 	Format        *FormatClause
-	UnionAll      *SelectQuery
-	UnionDistinct *SelectQuery
+	Union         *SelectQuery
+	UnionMode     UnionMode
 	Except        *SelectQuery
+	ExceptMode    ExceptMode
+	Intersect     *SelectQuery
+	IntersectMode IntersectMode
 }
 
 func (s *SelectQuery) Pos() Pos {
@@ -5200,18 +5227,18 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
-	if s.UnionAll != nil {
-		if err := s.UnionAll.Accept(visitor); err != nil {
-			return err
-		}
-	}
-	if s.UnionDistinct != nil {
-		if err := s.UnionDistinct.Accept(visitor); err != nil {
+	if s.Union != nil {
+		if err := s.Union.Accept(visitor); err != nil {
 			return err
 		}
 	}
 	if s.Except != nil {
 		if err := s.Except.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.Intersect != nil {
+		if err := s.Intersect.Accept(visitor); err != nil {
 			return err
 		}
 	}

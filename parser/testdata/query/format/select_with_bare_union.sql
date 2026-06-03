@@ -1,0 +1,6 @@
+-- Origin SQL:
+SELECT 1 AS v UNION SELECT 2 AS v
+
+
+-- Format SQL:
+SELECT 1 AS v UNION SELECT 2 AS v;

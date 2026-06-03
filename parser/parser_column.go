@@ -419,6 +419,8 @@ func (p *Parser) isSelectItemTerminatorKeyword() bool {
 		return true
 	case p.matchKeyword(KeywordExcept):
 		return true
+	case p.matchKeyword(KeywordIntersect):
+		return true
 	default:
 		return false
 	}
@@ -848,7 +850,7 @@ func (p *Parser) parseSelectItem() (*SelectItem, error) {
 
 	modifiers := make([]*FunctionExpr, 0)
 	for {
-		if p.matchKeyword(KeywordExcept) {
+		if p.matchKeyword(KeywordExcept) && (p.peekTokenKind(TokenKindLParen) || p.peekTokenKind(TokenKindIdent)) {
 			modifier, err := p.parseExceptExpr(p.Pos())
 			if err != nil {
 				return nil, err

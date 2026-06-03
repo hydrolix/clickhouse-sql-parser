@@ -1,0 +1,10 @@
+-- Origin SQL:
+SELECT 1 AS v EXCEPT ALL SELECT 2 AS v
+
+
+-- Beautify SQL:
+SELECT
+  1 AS v
+EXCEPT ALL
+SELECT
+  2 AS v;

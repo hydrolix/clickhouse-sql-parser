@@ -1,0 +1,10 @@
+-- Origin SQL:
+SELECT 1 AS v INTERSECT SELECT 2 AS v
+
+
+-- Beautify SQL:
+SELECT
+  1 AS v
+INTERSECT
+SELECT
+  2 AS v;

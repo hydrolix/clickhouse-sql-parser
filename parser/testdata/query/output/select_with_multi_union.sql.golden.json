@@ -35,7 +35,7 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": {
+    "Union": {
       "SelectPos": 25,
       "StatementEnd": 39,
       "With": null,
@@ -71,7 +71,7 @@
       "Limit": null,
       "Settings": null,
       "Format": null,
-      "UnionAll": {
+      "Union": {
         "SelectPos": 50,
         "StatementEnd": 64,
         "With": null,
@@ -107,14 +107,23 @@
         "Limit": null,
         "Settings": null,
         "Format": null,
-        "UnionAll": null,
-        "UnionDistinct": null,
-        "Except": null
+        "Union": null,
+        "UnionMode": "",
+        "Except": null,
+        "ExceptMode": "",
+        "Intersect": null,
+        "IntersectMode": ""
       },
-      "UnionDistinct": null,
-      "Except": null
+      "UnionMode": "ALL",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
     },
-    "UnionDistinct": null,
-    "Except": null
+    "UnionMode": "ALL",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]

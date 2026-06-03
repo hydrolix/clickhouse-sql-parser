@@ -63,10 +63,13 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Settings, fn) {
 			return false
 		}
-		if !Walk(n.UnionAll, fn) {
+		if !Walk(n.Union, fn) {
 			return false
 		}
-		if !Walk(n.UnionDistinct, fn) {
+		if !Walk(n.Except, fn) {
+			return false
+		}
+		if !Walk(n.Intersect, fn) {
 			return false
 		}
 		if !Walk(n.Format, fn) {

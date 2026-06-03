@@ -308,6 +308,29 @@ func TestParser_With_VariableInSettings(t *testing.T) {
 	}
 }
 
+// Covers the full 3x3 matrix of set operators {UNION, EXCEPT, INTERSECT} times
+// {bare, ALL, DISTINCT}, plus SETTINGS clauses combined with set ops.
+func TestParser_With_SetOperators(t *testing.T) {
+	validSQLs := []string{
+		"SELECT 1 UNION SELECT 2",
+		"SELECT 1 UNION ALL SELECT 2",
+		"SELECT 1 UNION DISTINCT SELECT 2",
+		"SELECT 1 EXCEPT SELECT 2",
+		"SELECT 1 EXCEPT ALL SELECT 2",
+		"SELECT 1 EXCEPT DISTINCT SELECT 2",
+		"SELECT 1 INTERSECT SELECT 2",
+		"SELECT 1 INTERSECT ALL SELECT 2",
+		"SELECT 1 INTERSECT DISTINCT SELECT 2",
+		"SELECT 1 SETTINGS max_threads=1 UNION SELECT 2 SETTINGS max_threads=2",
+		"SELECT 1 INTERSECT ALL SELECT 2 SETTINGS max_threads=2",
+	}
+	for _, sql := range validSQLs {
+		parser := NewParser(sql)
+		_, err := parser.ParseStmts()
+		require.NoError(t, err, "Failed to parse: %s", sql)
+	}
+}
+
 // Regression guard against the fork's deletion of the inline EXTRACT case from
 // parseColumnExpr. Both the function-call form (extract(col, regex)) and the
 // SQL special form (EXTRACT(unit FROM expr)) must remain parseable.

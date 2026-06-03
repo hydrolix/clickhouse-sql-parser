@@ -113,6 +113,7 @@ const (
 	KeywordInsert       = "INSERT"
 	KeywordInterval     = "INTERVAL"
 	KeywordInterpolate  = "INTERPOLATE"
+	KeywordIntersect    = "INTERSECT"
 	KeywordInto         = "INTO"
 	KeywordIp           = "IP"
 	KeywordIs           = "IS"
@@ -372,6 +373,7 @@ var keywords = NewSet(
 	KeywordInsert,
 	KeywordInterval,
 	KeywordInterpolate,
+	KeywordIntersect,
 	KeywordInto,
 	KeywordIp,
 	KeywordIs,

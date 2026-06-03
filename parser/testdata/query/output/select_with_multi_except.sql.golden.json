@@ -69,8 +69,8 @@
     "Limit": null,
     "Settings": null,
     "Format": null,
-    "UnionAll": null,
-    "UnionDistinct": null,
+    "Union": null,
+    "UnionMode": "",
     "Except": {
       "SelectPos": 41,
       "StatementEnd": 72,
@@ -141,8 +141,8 @@
       "Limit": null,
       "Settings": null,
       "Format": null,
-      "UnionAll": null,
-      "UnionDistinct": null,
+      "Union": null,
+      "UnionMode": "",
       "Except": {
         "SelectPos": 81,
         "StatementEnd": 112,
@@ -213,10 +213,19 @@
         "Limit": null,
         "Settings": null,
         "Format": null,
-        "UnionAll": null,
-        "UnionDistinct": null,
-        "Except": null
-      }
-    }
+        "Union": null,
+        "UnionMode": "",
+        "Except": null,
+        "ExceptMode": "",
+        "Intersect": null,
+        "IntersectMode": ""
+      },
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
+    },
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
   }
 ]
