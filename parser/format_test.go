@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -70,4 +71,74 @@ func TestFormatter_DefaultIndent(t *testing.T) {
 	// Test that default indent is 2 spaces
 	formatter := NewFormatter()
 	require.Equal(t, "  ", formatter.indent)
+}
+
+// Dollar-quoted `$$ … $$` literals are a lexer-only extension: the formatter
+// normalises them to single-quoted form. This exercises the full pipeline
+// (parse → format → parse → format) and asserts the second format is a fixed
+// point — the canonical idempotence property already used elsewhere in the
+// suite via validFormatSQL.
+func TestFormatter_DollarQuotedRoundtrip(t *testing.T) {
+	testCases := []struct {
+		name   string
+		input  string
+		format string
+	}{
+		{
+			name:   "Simple text block",
+			input:  "SELECT $$hello world$$",
+			format: "SELECT 'hello world';\n",
+		},
+		{
+			name:   "Numeric text block",
+			input:  "SELECT $$123$$",
+			format: "SELECT '123';\n",
+		},
+		{
+			name:   "Empty text block",
+			input:  "SELECT $$$$",
+			format: "SELECT '';\n",
+		},
+		{
+			name:   "Brace-wrapped placeholder is preserved verbatim",
+			input:  "SELECT $$${variable:format}$$",
+			format: "SELECT '${variable:format}';\n",
+		},
+		{
+			name:   "Comment-like content is preserved verbatim",
+			input:  "SELECT $$-- not a comment$$",
+			format: "SELECT '-- not a comment';\n",
+		},
+		{
+			name:   "Block-comment-like content is preserved verbatim",
+			input:  "SELECT $$/* nor this */$$",
+			format: "SELECT '/* nor this */';\n",
+		},
+		{
+			name:   "Single dollar still flows into identifier path",
+			input:  "SELECT $col FROM t",
+			format: "SELECT $col FROM t;\n",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			parser := NewParser(tc.input)
+			stmts, err := parser.ParseStmts()
+			require.NoError(t, err, "Failed to parse: %s", tc.input)
+
+			var builder strings.Builder
+			for _, stmt := range stmts {
+				builder.WriteString(Format(stmt))
+				builder.WriteByte(';')
+				builder.WriteByte('\n')
+			}
+			formatted := builder.String()
+			require.Equal(t, tc.format, formatted)
+
+			// Second iteration must be a fixed point: re-parsing and
+			// re-formatting `formatted` yields `formatted` byte-for-byte.
+			validFormatSQL(t, formatted)
+		})
+	}
 }

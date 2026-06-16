@@ -72,6 +72,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Intersect, fn) {
 			return false
 		}
+		if !Walk(n.OuterSettings, fn) {
+			return false
+		}
 		if !Walk(n.Format, fn) {
 			return false
 		}

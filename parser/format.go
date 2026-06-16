@@ -2257,6 +2257,9 @@ func (s *SelectItem) FormatSQL(formatter *Formatter) {
 }
 
 func (s *SelectQuery) FormatSQL(formatter *Formatter) {
+	if s.HasParen {
+		formatter.WriteByte('(')
+	}
 	if s.With != nil {
 		formatter.WriteString("WITH")
 		formatter.Indent()
@@ -2375,6 +2378,13 @@ func (s *SelectQuery) FormatSQL(formatter *Formatter) {
 		}
 		formatter.Break()
 		formatter.WriteExpr(s.Intersect)
+	}
+	if s.HasParen {
+		formatter.WriteByte(')')
+		if s.OuterSettings != nil {
+			formatter.Break()
+			formatter.WriteExpr(s.OuterSettings)
+		}
 	}
 }
 

@@ -1,0 +1,6 @@
+-- Origin SQL:
+SELECT 1 UNION ALL (SELECT 2)
+
+
+-- Format SQL:
+SELECT 1 UNION ALL (SELECT 2);

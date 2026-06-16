@@ -1,20 +1,93 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  ## Purpose
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  A ClickHouse SQL parser and formatter in Go. Given ClickHouse SQL text it produces a typed AST (`parser`
+  package: `SelectQuery`, `InsertStmt`, `AlterTable`, `DescribeStmt`, …) and a canonical re-serialisation
+  via `Format(stmt)` / `(*Formatter).Beautify`. Consumed both as a Go library and as the
+  `clickhouse-sql-parser` CLI. The library is bidirectional: parse → format must be a fixed point on every
+  committed `.sql` fixture, so downstream tooling (linters, IDE integrations, dashboard rewriters) can
+  round-trip user SQL without losing intent.
+
+  This is the Hydrolix fork of upstream `AfterShip/clickhouse-sql-parser`. Hydrolix changes land on `main`;
+  upstream syncs come in via `sync/upstream-vX.Y.Z-*` merge branches.
+
+  Authoritative coding standards live in `AGENTS.md` (and `.claude/CLAUDE.md`) — proposals, designs, specs,
+  and tasks should assume those standards apply.
+
+  ## Domain vocabulary
+
+  - **Exported AST surface** — `SelectQuery`, `SubQuery`, `SettingsClause`, `UnionMode`/`ExceptMode`/
+    `IntersectMode`, `Format`, `Beautify`, `Accept`, `ASTVisitor`, `Walk`, `ParseStmts`. These names ARE the
+    user contract; the proposal and spec layers can name them freely. Unexported helpers (`parseSelectQuery`,
+    `parseSubQuery`, `tryParseSettingsClause`, …) are implementation and stay in design.md / tasks.md.
+  - **Round-trip / fixed-point property** — `Format(Parse(sql)) == Format(Parse(Format(Parse(sql))))`. Every
+    `.sql` fixture under `parser/testdata/` upholds this; `validFormatSQL` in `parser/format_test.go` is the
+    canonical exerciser.
+  - **Three golden families per fixture** — JSON AST (`<category>/output/<name>.sql.golden.json`), compact
+    SQL (`<category>/format/<name>.sql`), beautified SQL (`<category>/format/beautify/<name>.sql`). Goldens
+    are regenerated via `make update_test` or `go test … -update`. Adding an AST field shifts the JSON-golden
+    line count by the number of node renderings; format/beautify goldens stay byte-identical for additive
+    changes that don't reach the formatter.
+  - **Set-op chain** — UNION / EXCEPT / INTERSECT × bare / ALL / DISTINCT (the 3×3 matrix), encoded on
+    `SelectQuery` as three optional pointer-pairs (`Union`/`UnionMode`, `Except`/`ExceptMode`,
+    `Intersect`/`IntersectMode`). Right-recursive today; mixed-operator precedence is a KNOWN limitation, see
+    the archived `add-set-operator-modes` change.
+  - **SubQuery-vs-set-op paren boundary** — parens around a `SELECT` used as a subexpression (FROM clause,
+    scalar subquery, view body, INSERT-SELECT) are consumed by the `SubQuery` wrapper, which carries its own
+    `HasParen` flag. Parens around a set-op leg or a top-level chain are consumed by `SelectQuery`'s parser
+    itself. This boundary is load-bearing for round-trip correctness — surface-level changes that touch
+    paren consumption must keep it intact.
+
+  ## Constraints that shape proposals
+
+  - **Exported AST is a public contract.** Adding fields is additive (only shifts JSON-golden line counts).
+    Renaming, removing, or reordering exported fields is a breaking API change and must be called out
+    explicitly in the proposal's Impact section.
+  - **Round-trip preservation is the central guarantee.** Any AST shape change must come with regenerated
+    goldens that prove the fixed-point property still holds for every fixture.
+  - **JSON-golden rendering is explicit** — every field renders (`null` / `""` included). The repo
+    convention does NOT use `omitempty`; AST snapshots are deliberately self-describing.
+  - **Lexer additions can reshape parses.** Reserving a new keyword can break previously-parseable inputs
+    that used the word as an identifier; grep `parser/testdata/` before reserving.
+  - **Upstream sync hygiene matters.** Structural changes that conflict with upstream
+    (`AfterShip/clickhouse-sql-parser`) make future merges harder; favour additive shapes when possible.
+
+rules:
+  proposal:
+    - "Proposal carries WHY and user-visible OUTCOMES. HOW belongs in design; behavioral contracts belong in spec."
+    - "Write the proposal so a reader who has not opened design.md or spec.md can follow it end-to-end."
+    - "Open the Why section with the problem in plain language: what the parser accepts/rejects today, what round-trip behaviour breaks, what an AST consumer cannot tell from the current shape. Avoid file paths, line numbers, and unexported-helper names in the Why — those belong in design.md."
+    - "In What Changes, lead each bullet with the user-observable change (\"Parens around a set-op leg round-trip preserved\", \"Trailing SETTINGS after `)` lands in a distinct AST field\"), not the implementation step. Outcome first, optional one-sentence context after."
+    - "The exported AST surface IS user-facing in this project — naming `SelectQuery.Union`, `SettingsClause`, `UnionMode`, the `FormatSQL` contract, etc. in the proposal is correct and expected. What does NOT belong: file paths (`parser/parser_query.go:993`), line numbers, unexported helpers (`tryParseSettingsClause`, `parseSelectStmt`), lexer token names, and ClickHouse server version pins. Frame internal-mechanism constraints in terms of the observable AST or formatted-output effect; design.md carries the mechanism."
+    - "Show user-facing contracts that already exist in the spec (the exported AST shape, the round-trip / fixed-point property, JSON-golden diff shape, the set of accepted surface forms) in their final form. Don't duplicate the algorithmic detail behind them."
+    - "Keep the proposal 1–2 pages. If a bullet runs past ~3 lines it is probably describing HOW — move it to design.md and replace with an outcome sentence."
+    - "Use concrete SQL examples sparingly and only where they make the behavior clearer at a glance (e.g. `SELECT 1 UNION ALL (SELECT 2) SETTINGS x=1`). Skip them when the prose already conveys the behavior."
+    - "Impact section enumerates JSON-golden diff shape (\"+N lines per X rendering across ~M fixtures\"), format/beautify-golden footprint (\"byte-identical for all existing fixtures\" is the strong claim worth stating when true), new `.sql` fixtures, compatibility guarantees for the exported AST, rollback story, performance posture, and explicit out-of-scope items. Code-level reach (which files change) is implementation detail and belongs in design.md."
+
+  # Applies to spec.md files inside change directories AND capability specs in openspec/specs/.
+  specs:
+    - "Describe WHAT the parser guarantees and WHY it matters, not HOW. Algorithmic steps, helper-function names, file paths, line numbers, and lexer-internal mechanics belong in design.md."
+    - "Anchor each Requirement to an observable behavioral contract — a parse outcome, an AST shape invariant, a formatted-output guarantee, a golden-file diff shape, or a round-trip property. Avoid restating the implementation."
+    - "Each Requirement body MUST contain a SHALL or MUST statement (the validator enforces this). Open with the contract sentence, then narrow it with constraints — don't bury the rule under context."
+    - "Use the exported AST API surface in requirement bodies and scenarios (`SelectQuery.Union`, `Settings`, `HasParen`, `OuterSettings`, `UnionMode`, `ParseStmts`, `Format`) because those names ARE the user contract. Avoid unexported helpers (`parseSelectStmt`, `tryParseSettingsClause`) — those are implementation. If you find yourself reaching for an unexported name, you're describing HOW; move it to design.md."
+    - "Don't pin requirements to a specific ClickHouse server version or upstream parser SHA. When behaviour depends on a server semantic (e.g. `union_default_mode` runtime resolution), frame the requirement as the syntactic shape the parser must accept and document the version coupling in design.md."
+    - "Scenarios MUST use concrete inputs and observable outcomes: a `.sql` text in, the resulting AST field values OR the re-formatted SQL OR the golden-file diff OR a parse-error condition out. Use `**WHEN** … **THEN** …` (and `**AND**` for conjunctions). Use `**GIVEN**` only when the surrounding domain fact is non-obvious (e.g. ClickHouse server semantics)."
+    - "Performance optimisations, allocation invariants, and parser-internal quirks are design decisions, not requirements. A Requirement about a zero-allocation lexer fast-path or a particular lookahead depth belongs in design.md."
+    - "When a requirement's body grows past ~6 lines, check whether you've started describing the algorithm. Replace step-by-step prose with the invariant the algorithm is meant to uphold."
+
+  design:
+    - "Design is where HOW lives: parser flow (which function consumes which token), AST field placement and ordering decisions, formatter emission order, walker/visitor traversal order, asymmetric edge cases (e.g. the `parseSubQuery`-vs-`parseSelectQuery` paren boundary), and ClickHouse-version coupling notes. Spec stays free of these."
+    - "When a design decision affects observable behaviour, surface the *observable* part in spec.md and the *cause* in design.md. Cross-reference by decision number (e.g. \"see D3\") rather than duplicating."
+    - "Each Decision states the choice, the rationale, the trade-offs accepted, and (when relevant) the alternatives considered. Don't silently merge unrelated decisions — squash only when they answer the same underlying question."
+    - "Call out the JSON-golden / format-golden / beautify-golden regeneration footprint explicitly: how many fixtures change, what the per-rendering diff looks like, which fixtures act as regression guards. This catches drift between intent and reality during code review."
+
+  tasks:
+    - "Every spec Requirement's scenarios MUST trace to at least one task entry. An implementation task whose work satisfies the scenario is sufficient; a separate test task is the cleaner option for invariants whose verification is the load-bearing part. Goal: a future reader following tasks.md as the work-record can find every spec scenario's verification without grep."
+    - "When a test exists in the codebase but no task names it (ad-hoc tests added during implementation, regression guards added during bug-fix sessions), add a `[x]` task entry that names both the test and the spec scenario(s) it pins. Backfilling these is cheap and prevents the spec→test trace from being lost."
+    - "Tasks legitimately name implementation artifacts (file paths, function names, test names) — unlike spec.md and design.md."
+    - "Group tasks by phase, not by spec Requirement. A single section can carry tasks tied to multiple Requirements."
+    - "Keep tasks small enough to verify individually. A task that says \"add a test\" names the test function; a task that says \"add a helper\" names the helper and its signature. Vague tasks create coverage gaps that surface only at audit time."
+    - "Order tasks so the baseline (capture pre-change test state, snapshot reference goldens) runs first, build-affecting changes that won't compile in isolation run together (AST + walker + formatter + parser), golden regen runs once after the build is green, and new fixtures are added last. Close out with full-suite verification and snapshot cleanup."
+    - "When a task regenerates goldens with `-update`, the immediately-following task MUST be a `git diff` / `diff` spot-check that asserts the diff shape, not just the file count. Drive-by golden updates without diff inspection are how subtle regressions land."

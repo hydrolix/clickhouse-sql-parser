@@ -5135,6 +5135,14 @@ type SelectQuery struct {
 	LimitBy       *LimitByClause
 	Limit         *LimitClause
 	Settings      *SettingsClause
+	// HasParen is true when parseSelectQuery itself consumed the wrapping
+	// parens around this SelectQuery (vs. the parens being consumed by an
+	// enclosing parseSubQuery wrapper).
+	HasParen bool
+	// OuterSettings is the SETTINGS clause that appears AFTER the closing `)`
+	// of a paren-wrapped SelectQuery. Distinct from Settings, which holds
+	// SETTINGS inside the SELECT body. Non-nil only when HasParen is true.
+	OuterSettings *SettingsClause
 	Format        *FormatClause
 	Union         *SelectQuery
 	UnionMode     UnionMode
@@ -5239,6 +5247,11 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	}
 	if s.Intersect != nil {
 		if err := s.Intersect.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.OuterSettings != nil {
+		if err := s.OuterSettings.Accept(visitor); err != nil {
 			return err
 		}
 	}
