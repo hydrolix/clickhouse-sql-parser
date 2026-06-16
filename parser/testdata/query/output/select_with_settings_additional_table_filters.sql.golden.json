@@ -83,6 +83,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": null,
     "UnionMode": "",
@@ -175,6 +177,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": null,
     "UnionMode": "",
@@ -267,6 +271,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": null,
     "UnionMode": "",
@@ -359,6 +365,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": {
       "FormatPos": 404,
       "Format": {
@@ -492,6 +500,8 @@
                     "Offset": null
                   },
                   "Settings": null,
+                  "HasParen": false,
+                  "OuterSettings": null,
                   "Format": null,
                   "Union": null,
                   "UnionMode": "",
@@ -587,6 +597,8 @@
                     "LimitBy": null,
                     "Limit": null,
                     "Settings": null,
+                    "HasParen": false,
+                    "OuterSettings": null,
                     "Format": null,
                     "Union": null,
                     "UnionMode": "",
@@ -725,6 +737,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": null,
     "UnionMode": "",

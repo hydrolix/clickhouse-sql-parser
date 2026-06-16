@@ -54,6 +54,8 @@
         }
       ]
     },
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": {
       "SelectPos": 45,
@@ -110,6 +112,8 @@
           }
         ]
       },
+      "HasParen": false,
+      "OuterSettings": null,
       "Format": null,
       "Union": null,
       "UnionMode": "",

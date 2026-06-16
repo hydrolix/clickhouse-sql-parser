@@ -1,0 +1,101 @@
+[
+  {
+    "SelectPos": 0,
+    "StatementEnd": 8,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 7,
+          "NumEnd": 8,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": null,
+    "Union": {
+      "SelectPos": 20,
+      "StatementEnd": 53,
+      "With": null,
+      "Top": null,
+      "HasDistinct": false,
+      "DistinctOn": null,
+      "SelectItems": [
+        {
+          "Expr": {
+            "NumPos": 27,
+            "NumEnd": 28,
+            "Literal": "2",
+            "Base": 10
+          },
+          "Modifiers": [],
+          "Alias": null
+        }
+      ],
+      "From": null,
+      "Window": null,
+      "Prewhere": null,
+      "Where": null,
+      "GroupBy": null,
+      "WithTotal": false,
+      "Having": null,
+      "OrderBy": null,
+      "LimitBy": null,
+      "Limit": null,
+      "Settings": {
+        "SettingsPos": 29,
+        "ListEnd": 53,
+        "Items": [
+          {
+            "SettingsPos": 38,
+            "Name": {
+              "Name": "max_threads",
+              "QuoteType": 1,
+              "NamePos": 38,
+              "NameEnd": 49
+            },
+            "Expr": {
+              "NumPos": 52,
+              "NumEnd": 53,
+              "Literal": "1",
+              "Base": 10
+            }
+          }
+        ]
+      },
+      "HasParen": true,
+      "OuterSettings": null,
+      "Format": null,
+      "Union": null,
+      "UnionMode": "",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
+    },
+    "UnionMode": "ALL",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  }
+]

@@ -1025,6 +1025,14 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 		if err := p.expectTokenKind(TokenKindRParen); err != nil {
 			return nil, err
 		}
+		selectStmt.HasParen = true
+		outerSettings, err := p.tryParseSettingsClause(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		if outerSettings != nil {
+			selectStmt.OuterSettings = outerSettings
+		}
 	}
 	return selectStmt, nil
 }
@@ -1196,8 +1204,16 @@ func (p *Parser) parseCTEStmt(pos Pos) (*CTEStmt, error) {
 		return nil, err
 	}
 	if p.matchTokenKind(TokenKindLParen) {
+		// Consume the wrapping parens at this layer (mirrors parseSubQuery),
+		// so the inner SelectQuery.HasParen stays false — the CTE wrapper
+		// owns the parens, not the SELECT itself. Keeps every CTE-body's
+		// format/beautify golden byte-identical post-change.
+		_ = p.lexer.consumeToken()
 		selectQuery, err := p.parseSelectQuery(p.Pos())
 		if err != nil {
+			return nil, err
+		}
+		if err := p.expectTokenKind(TokenKindRParen); err != nil {
 			return nil, err
 		}
 		return &CTEStmt{

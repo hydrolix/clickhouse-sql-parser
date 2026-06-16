@@ -34,6 +34,8 @@
     "LimitBy": null,
     "Limit": null,
     "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": {
       "SelectPos": 30,
@@ -70,6 +72,8 @@
       "LimitBy": null,
       "Limit": null,
       "Settings": null,
+      "HasParen": false,
+      "OuterSettings": null,
       "Format": null,
       "Union": {
         "SelectPos": 60,
@@ -106,6 +110,8 @@
         "LimitBy": null,
         "Limit": null,
         "Settings": null,
+        "HasParen": false,
+        "OuterSettings": null,
         "Format": null,
         "Union": null,
         "UnionMode": "",

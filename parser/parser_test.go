@@ -331,6 +331,115 @@ func TestParser_With_SetOperators(t *testing.T) {
 	}
 }
 
+// Disambiguates the four placements of SETTINGS around a paren-wrapped set-op
+// leg (inside parens, outside parens, top-level wrapped chain, both coexist),
+// plus the no-SETTINGS round-trip case. Locks in the per-node invariant
+// (OuterSettings != nil ⇒ HasParen == true) and the no-parens fallback.
+func TestParser_With_ChainSettingsDisambiguation(t *testing.T) {
+	type expect struct {
+		// outer = head SelectQuery returned by ParseStmts.
+		outerHasParen      bool
+		outerHasSettings   bool
+		outerHasOuterSetts bool
+		// inner = outer.Union when non-nil (all five SQLs use UNION ALL).
+		// nil if the SQL has no set-op chain (the top-level wrapped chain case
+		// still has Union; only future bare top-level SQLs would not).
+		innerHasParen      bool
+		innerHasSettings   bool
+		innerHasOuterSetts bool
+	}
+	cases := []struct {
+		name string
+		sql  string
+		want expect
+	}{
+		{
+			name: "inside parens — attaches to inner Settings",
+			sql:  "SELECT 1 UNION ALL (SELECT 2 SETTINGS max_threads=1)",
+			want: expect{
+				innerHasParen:    true,
+				innerHasSettings: true,
+			},
+		},
+		{
+			name: "outside parens — attaches to inner OuterSettings",
+			sql:  "SELECT 1 UNION ALL (SELECT 2) SETTINGS max_threads=1",
+			want: expect{
+				innerHasParen:      true,
+				innerHasOuterSetts: true,
+			},
+		},
+		{
+			name: "top-level wrapped chain — attaches to outer OuterSettings",
+			sql:  "(SELECT 1 UNION ALL SELECT 2) SETTINGS max_threads=1",
+			want: expect{
+				outerHasParen:      true,
+				outerHasOuterSetts: true,
+			},
+		},
+		{
+			name: "parens preserved, no SETTINGS",
+			sql:  "SELECT 1 UNION ALL (SELECT 2)",
+			want: expect{
+				innerHasParen: true,
+			},
+		},
+		{
+			name: "both placements coexist on the same leg",
+			sql:  "SELECT 1 UNION ALL (SELECT 2 SETTINGS max_threads=1) SETTINGS max_threads=2",
+			want: expect{
+				innerHasParen:      true,
+				innerHasSettings:   true,
+				innerHasOuterSetts: true,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stmts, err := NewParser(tc.sql).ParseStmts()
+			require.NoError(t, err, "parse failed for: %s", tc.sql)
+			require.Len(t, stmts, 1, "expected exactly one statement")
+			outer, ok := stmts[0].(*SelectQuery)
+			require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+
+			require.Equal(t, tc.want.outerHasParen, outer.HasParen, "outer.HasParen")
+			require.Equal(t, tc.want.outerHasSettings, outer.Settings != nil, "outer.Settings non-nil")
+			require.Equal(t, tc.want.outerHasOuterSetts, outer.OuterSettings != nil, "outer.OuterSettings non-nil")
+
+			require.NotNil(t, outer.Union, "all five SQLs have a UNION leg")
+			inner := outer.Union
+			require.Equal(t, tc.want.innerHasParen, inner.HasParen, "inner.HasParen")
+			require.Equal(t, tc.want.innerHasSettings, inner.Settings != nil, "inner.Settings non-nil")
+			require.Equal(t, tc.want.innerHasOuterSetts, inner.OuterSettings != nil, "inner.OuterSettings non-nil")
+
+			// Per-node invariant: OuterSettings != nil ⇒ HasParen == true.
+			if outer.OuterSettings != nil {
+				require.True(t, outer.HasParen, "invariant violated on outer: OuterSettings non-nil but HasParen false")
+			}
+			if inner.OuterSettings != nil {
+				require.True(t, inner.HasParen, "invariant violated on inner: OuterSettings non-nil but HasParen false")
+			}
+		})
+	}
+
+	// Bare no-parens fallback: SETTINGS lands on inner.Settings, not OuterSettings.
+	t.Run("no-parens trailing SETTINGS stays on inner Settings", func(t *testing.T) {
+		stmts, err := NewParser("SELECT 1 UNION ALL SELECT 2 SETTINGS max_threads=1").ParseStmts()
+		require.NoError(t, err)
+		outer, ok := stmts[0].(*SelectQuery)
+		if !ok {
+			require.Failf(t, "Type coarse fail.", "expected SelectQuery, got %T", stmts[0])
+		}
+		require.False(t, outer.HasParen)
+		require.Nil(t, outer.Settings)
+		require.Nil(t, outer.OuterSettings)
+		require.NotNil(t, outer.Union)
+		require.False(t, outer.Union.HasParen)
+		require.NotNil(t, outer.Union.Settings)
+		require.Nil(t, outer.Union.OuterSettings)
+	})
+}
+
 // Regression guard against the fork's deletion of the inline EXTRACT case from
 // parseColumnExpr. Both the function-call form (extract(col, regex)) and the
 // SQL special form (EXTRACT(unit FROM expr)) must remain parseable.

@@ -1,0 +1,81 @@
+[
+  {
+    "SelectPos": 0,
+    "StatementEnd": 8,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 7,
+          "NumEnd": 8,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": null,
+    "Union": {
+      "SelectPos": 20,
+      "StatementEnd": 28,
+      "With": null,
+      "Top": null,
+      "HasDistinct": false,
+      "DistinctOn": null,
+      "SelectItems": [
+        {
+          "Expr": {
+            "NumPos": 27,
+            "NumEnd": 28,
+            "Literal": "2",
+            "Base": 10
+          },
+          "Modifiers": [],
+          "Alias": null
+        }
+      ],
+      "From": null,
+      "Window": null,
+      "Prewhere": null,
+      "Where": null,
+      "GroupBy": null,
+      "WithTotal": false,
+      "Having": null,
+      "OrderBy": null,
+      "LimitBy": null,
+      "Limit": null,
+      "Settings": null,
+      "HasParen": true,
+      "OuterSettings": null,
+      "Format": null,
+      "Union": null,
+      "UnionMode": "",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
+    },
+    "UnionMode": "ALL",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  }
+]

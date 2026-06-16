@@ -153,6 +153,8 @@
     "LimitBy": null,
     "Limit": null,
     "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
     "Format": null,
     "Union": null,
     "UnionMode": "",
