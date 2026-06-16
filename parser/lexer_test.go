@@ -140,17 +140,81 @@ func TestConsumeString(t *testing.T) {
 }
 
 func TestConsumeTextBlock(t *testing.T) {
-	strs := []string{
-		"$$hello world$$",
-		"$$123$$",
-		"$$${variable:format} and 'string' $$",
-	}
-	for _, s := range strs {
-		lexer := NewLexer(s)
+	t.Run("Simple, numeric, and embedded-content text blocks", func(t *testing.T) {
+		strs := []string{
+			"$$hello world$$",
+			"$$123$$",
+			"$$${variable:format} and 'string' $$",
+		}
+		for _, s := range strs {
+			lexer := NewLexer(s)
+			err := lexer.consumeToken()
+			require.NoError(t, err)
+			require.Equal(t, TokenKindString, lexer.lastToken.Kind)
+			require.Equal(t, s[2:len(s)-2], lexer.lastToken.String)
+			require.True(t, lexer.isEOF())
+		}
+	})
+
+	t.Run("Empty text block", func(t *testing.T) {
+		lexer := NewLexer("$$$$")
 		err := lexer.consumeToken()
 		require.NoError(t, err)
 		require.Equal(t, TokenKindString, lexer.lastToken.Kind)
-		require.Equal(t, s[2:len(s)-2], lexer.lastToken.String)
+		require.Equal(t, "", lexer.lastToken.String)
+		require.True(t, lexer.isEOF())
+	})
+
+	t.Run("Verbatim content: quotes, backslashes, comment-like sequences", func(t *testing.T) {
+		testCases := []struct {
+			input    string
+			expected string
+		}{
+			{`$$it's a 'test'$$`, `it's a 'test'`},
+			{`$$a\nb\\c$$`, `a\nb\\c`},
+			{`$$-- not a comment$$`, `-- not a comment`},
+			{`$$/* nor this */$$`, `/* nor this */`},
+		}
+		for _, tc := range testCases {
+			lexer := NewLexer(tc.input)
+			err := lexer.consumeToken()
+			require.NoError(t, err, "Failed to parse: %s", tc.input)
+			require.Equal(t, TokenKindString, lexer.lastToken.Kind)
+			require.Equal(t, tc.expected, lexer.lastToken.String)
+			require.True(t, lexer.isEOF())
+		}
+	})
+
+	t.Run("Unterminated text block returns invalid string error", func(t *testing.T) {
+		unterminated := []string{
+			"$$hello world",
+			"$$",
+			"$$$",
+		}
+		for _, s := range unterminated {
+			lexer := NewLexer(s)
+			err := lexer.consumeToken()
+			require.Error(t, err, "Expected error for unterminated input: %q", s)
+			require.Equal(t, "invalid string", err.Error())
+		}
+	})
+}
+
+// A single `$` not immediately followed by another `$` must continue to flow
+// into the identifier path — preserving bare `$ident` and brace-wrapped
+// `${name}` / `${name:format}` placeholders.
+func TestConsumeDollarIdent(t *testing.T) {
+	testCases := []string{
+		"$col",
+		"${tbl}",
+		"${y:sqlstring}",
+	}
+	for _, s := range testCases {
+		lexer := NewLexer(s)
+		err := lexer.consumeToken()
+		require.NoError(t, err, "Failed to parse: %s", s)
+		require.Equal(t, TokenKindIdent, lexer.lastToken.Kind)
+		require.Equal(t, s, lexer.lastToken.String)
 		require.True(t, lexer.isEOF())
 	}
 }
