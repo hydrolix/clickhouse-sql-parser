@@ -15,6 +15,16 @@ func parseOneStmt(t *testing.T, sql string) Expr {
 	return stmts[0]
 }
 
+// parseSelectItemExpr parses a single-statement SELECT and returns the first
+// projection expression, so tests can assert the tree structure directly.
+func parseSelectItemExpr(t *testing.T, sql string) Expr {
+	t.Helper()
+	selectQuery, ok := parseOneStmt(t, sql).(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery for %s", sql)
+	require.NotEmpty(t, selectQuery.SelectItems)
+	return selectQuery.SelectItems[0].Expr
+}
+
 // parseTableFunctionExpr parses a single-statement SELECT and returns the
 // table function in its FROM clause.
 func parseTableFunctionExpr(t *testing.T, sql string) *TableFunctionExpr {
@@ -25,6 +35,28 @@ func parseTableFunctionExpr(t *testing.T, sql string) *TableFunctionExpr {
 	fn, ok := table.Table.Expr.(*TableFunctionExpr)
 	require.True(t, ok, "%s: expected *TableFunctionExpr, got %T", sql, table.Table.Expr)
 	return fn
+}
+
+func TestSignedNumberAfterClosingBracketIsBinaryOperator(t *testing.T) {
+	// A closing `)` or `]` ends an expression, so the following `+`/`-` is a
+	// binary operator and not the sign of the next numeric literal.
+	for _, sql := range []string{"SELECT (1)-1", "SELECT arr[1]-1", "SELECT f()-1"} {
+		expr := parseSelectItemExpr(t, sql)
+		op, ok := expr.(*BinaryOperation)
+		require.True(t, ok, "%s: expected BinaryOperation at the top, got %T", sql, expr)
+		require.Equal(t, TokenKindMinus, op.Operation, sql)
+		right, ok := op.RightExpr.(*NumberLiteral)
+		require.True(t, ok, "%s: right side should be the unsigned literal `1`, got %T", sql, op.RightExpr)
+		require.Equal(t, "1", right.Literal, sql)
+	}
+
+	// A `+`/`-` after an opening bracket is still a sign, not an operator.
+	expr := parseSelectItemExpr(t, "SELECT arr[-1]")
+	require.Equal(t, "arr[-1]", Format(expr))
+
+	// `arr[1]-1 FROM t` parses in a full statement.
+	_, err := NewParser("SELECT arr[1]-1 FROM t").ParseStmts()
+	require.NoError(t, err)
 }
 
 func TestTableFunctionArgAcceptsOperatorExpressions(t *testing.T) {
