@@ -83,8 +83,12 @@ func TestTableFunctionArgAcceptsOperatorExpressions(t *testing.T) {
 		require.Equal(t, sql, Format(parseOneStmt(t, sql)), sql)
 	}
 
-	_, err := NewParser("SELECT number FROM numbers(toUInt32(dateDiff('hour', toDateTime(1), toDateTime(7200))) + 1)").ParseStmts()
-	require.NoError(t, err)
+	for _, sql := range []string{
+		"SELECT number FROM numbers(toUInt32(dateDiff('hour', toDateTime(1), toDateTime(7200))) + 1)",
+		"SELECT * FROM numbers(10 + 1)",
+	} {
+		parseOneStmt(t, sql)
+	}
 }
 
 func TestTableFunctionArgFloatAndZeroArgumentCall(t *testing.T) {

@@ -118,6 +118,7 @@
           "HasParen": false,
           "OuterSettings": null,
           "Format": null,
+          "FormatSettings": null,
           "Union": null,
           "UnionMode": "",
           "Except": null,

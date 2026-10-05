@@ -59,6 +59,7 @@
     "HasParen": false,
     "OuterSettings": null,
     "Format": null,
+    "FormatSettings": null,
     "Union": {
       "SelectPos": 59,
       "StatementEnd": 121,
@@ -127,6 +128,7 @@
           "NameEnd": 121
         }
       },
+      "FormatSettings": null,
       "Union": null,
       "UnionMode": "",
       "Except": null,

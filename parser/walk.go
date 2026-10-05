@@ -78,6 +78,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Format, fn) {
 			return false
 		}
+		if !Walk(n.FormatSettings, fn) {
+			return false
+		}
 	case *SubQuery:
 		if !Walk(n.Select, fn) {
 			return false

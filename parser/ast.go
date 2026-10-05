@@ -5117,24 +5117,24 @@ func (f *WindowFrameParam) Accept(visitor ASTVisitor) error {
 }
 
 type SelectQuery struct {
-	SelectPos     Pos
-	StatementEnd  Pos
-	With          *WithClause
-	Top           *TopClause
-	HasDistinct   bool
-	DistinctOn    *DistinctOn
-	SelectItems   []*SelectItem
-	From          *FromClause
-	Window        *WindowClause
-	Prewhere      *PrewhereClause
-	Where         *WhereClause
-	GroupBy       *GroupByClause
-	WithTotal     bool
-	Having        *HavingClause
-	OrderBy       *OrderByClause
-	LimitBy       *LimitByClause
-	Limit         *LimitClause
-	Settings      *SettingsClause
+	SelectPos    Pos
+	StatementEnd Pos
+	With         *WithClause
+	Top          *TopClause
+	HasDistinct  bool
+	DistinctOn   *DistinctOn
+	SelectItems  []*SelectItem
+	From         *FromClause
+	Window       *WindowClause
+	Prewhere     *PrewhereClause
+	Where        *WhereClause
+	GroupBy      *GroupByClause
+	WithTotal    bool
+	Having       *HavingClause
+	OrderBy      *OrderByClause
+	LimitBy      *LimitByClause
+	Limit        *LimitClause
+	Settings     *SettingsClause
 	// HasParen is true when parseSelectQuery itself consumed the wrapping
 	// parens around this SelectQuery (vs. the parens being consumed by an
 	// enclosing parseSubQuery wrapper).
@@ -5144,12 +5144,20 @@ type SelectQuery struct {
 	// SETTINGS inside the SELECT body. Non-nil only when HasParen is true.
 	OuterSettings *SettingsClause
 	Format        *FormatClause
-	Union         *SelectQuery
-	UnionMode     UnionMode
-	Except        *SelectQuery
-	ExceptMode    ExceptMode
-	Intersect     *SelectQuery
-	IntersectMode IntersectMode
+	// FormatSettings is the SETTINGS clause that appears AFTER the FORMAT
+	// clause, e.g. `SELECT 1 FORMAT JSON SETTINGS max_threads = 1`. Settings
+	// holds the clause before FORMAT. Both can be non-nil; the parser keeps
+	// both and does not merge them. ClickHouse (verified with 26.8) accepts
+	// both positions in one query and merges them: distinct settings are all
+	// applied, and when the same setting appears in both, the value from the
+	// clause before FORMAT wins. Non-nil only when Format is non-nil.
+	FormatSettings *SettingsClause
+	Union          *SelectQuery
+	UnionMode      UnionMode
+	Except         *SelectQuery
+	ExceptMode     ExceptMode
+	Intersect      *SelectQuery
+	IntersectMode  IntersectMode
 }
 
 func (s *SelectQuery) Pos() Pos {
@@ -5232,6 +5240,11 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	}
 	if s.Format != nil {
 		if err := s.Format.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.FormatSettings != nil {
+		if err := s.FormatSettings.Accept(visitor); err != nil {
 			return err
 		}
 	}

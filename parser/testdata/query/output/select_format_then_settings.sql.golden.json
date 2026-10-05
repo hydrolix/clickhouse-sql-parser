@@ -1,0 +1,690 @@
+[
+  {
+    "SelectPos": 0,
+    "StatementEnd": 45,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 7,
+          "NumEnd": 8,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 9,
+      "Format": {
+        "Name": "JSON",
+        "QuoteType": 1,
+        "NamePos": 16,
+        "NameEnd": 20
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 21,
+      "ListEnd": 45,
+      "Items": [
+        {
+          "SettingsPos": 30,
+          "Name": {
+            "Name": "max_threads",
+            "QuoteType": 1,
+            "NamePos": 30,
+            "NameEnd": 41
+          },
+          "Expr": {
+            "NumPos": 44,
+            "NumEnd": 45,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 48,
+    "StatementEnd": 257,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "Name": {
+            "Name": "count",
+            "QuoteType": 1,
+            "NamePos": 55,
+            "NameEnd": 60
+          },
+          "Params": {
+            "LeftParenPos": 60,
+            "RightParenPos": 61,
+            "Items": {
+              "ListPos": 61,
+              "ListEnd": 61,
+              "HasDistinct": false,
+              "Items": []
+            },
+            "ColumnArgList": null
+          }
+        },
+        "Modifiers": [],
+        "Alias": {
+          "Name": "n",
+          "QuoteType": 1,
+          "NamePos": 66,
+          "NameEnd": 67
+        }
+      }
+    ],
+    "From": {
+      "FromPos": 68,
+      "Expr": {
+        "Table": {
+          "TablePos": 73,
+          "TableEnd": 83,
+          "Alias": null,
+          "Expr": {
+            "Database": {
+              "Name": "hydro",
+              "QuoteType": 1,
+              "NamePos": 73,
+              "NameEnd": 78
+            },
+            "Table": {
+              "Name": "logs",
+              "QuoteType": 1,
+              "NamePos": 79,
+              "NameEnd": 83
+            }
+          },
+          "HasFinal": false
+        },
+        "StatementEnd": 83,
+        "SampleRatio": null,
+        "HasFinal": false
+      }
+    },
+    "Window": null,
+    "Prewhere": null,
+    "Where": {
+      "WherePos": 84,
+      "Expr": {
+        "LeftExpr": {
+          "Name": "timestamp",
+          "QuoteType": 1,
+          "NamePos": 90,
+          "NameEnd": 99
+        },
+        "Operation": "\u003e=",
+        "RightExpr": {
+          "LeftExpr": {
+            "Name": {
+              "Name": "now",
+              "QuoteType": 1,
+              "NamePos": 103,
+              "NameEnd": 106
+            },
+            "Params": {
+              "LeftParenPos": 106,
+              "RightParenPos": 107,
+              "Items": {
+                "ListPos": 107,
+                "ListEnd": 107,
+                "HasDistinct": false,
+                "Items": []
+              },
+              "ColumnArgList": null
+            }
+          },
+          "Operation": "-",
+          "RightExpr": {
+            "Name": {
+              "Name": "toIntervalHour",
+              "QuoteType": 1,
+              "NamePos": 111,
+              "NameEnd": 125
+            },
+            "Params": {
+              "LeftParenPos": 125,
+              "RightParenPos": 127,
+              "Items": {
+                "ListPos": 126,
+                "ListEnd": 127,
+                "HasDistinct": false,
+                "Items": [
+                  {
+                    "Expr": {
+                      "NumPos": 126,
+                      "NumEnd": 127,
+                      "Literal": "1",
+                      "Base": 10
+                    },
+                    "Alias": null
+                  }
+                ]
+              },
+              "ColumnArgList": null
+            }
+          },
+          "HasGlobal": false,
+          "HasNot": false
+        },
+        "HasGlobal": false,
+        "HasNot": false
+      }
+    },
+    "GroupBy": {
+      "GroupByPos": 129,
+      "GroupByEnd": 142,
+      "AggregateType": "",
+      "Expr": {
+        "ListPos": 138,
+        "ListEnd": 141,
+        "HasDistinct": false,
+        "Items": [
+          {
+            "Expr": {
+              "Name": "app",
+              "QuoteType": 1,
+              "NamePos": 138,
+              "NameEnd": 141
+            },
+            "Alias": null
+          }
+        ]
+      },
+      "WithCube": false,
+      "WithRollup": false,
+      "WithTotals": false
+    },
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": {
+      "OrderPos": 142,
+      "ListEnd": 152,
+      "Items": [
+        {
+          "OrderPos": 142,
+          "Expr": {
+            "Name": "n",
+            "QuoteType": 1,
+            "NamePos": 151,
+            "NameEnd": 152
+          },
+          "Alias": null,
+          "Direction": "DESC",
+          "Fill": null
+        }
+      ],
+      "Interpolate": null
+    },
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 158,
+      "Format": {
+        "Name": "CSVWithNames",
+        "QuoteType": 1,
+        "NamePos": 165,
+        "NameEnd": 177
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 178,
+      "ListEnd": 257,
+      "Items": [
+        {
+          "SettingsPos": 187,
+          "Name": {
+            "Name": "hdx_query_max_timerange_sec",
+            "QuoteType": 1,
+            "NamePos": 187,
+            "NameEnd": 214
+          },
+          "Expr": {
+            "NumPos": 217,
+            "NumEnd": 222,
+            "Literal": "86400",
+            "Base": 10
+          }
+        },
+        {
+          "SettingsPos": 224,
+          "Name": {
+            "Name": "hdx_query_max_execution_time",
+            "QuoteType": 1,
+            "NamePos": 224,
+            "NameEnd": 252
+          },
+          "Expr": {
+            "NumPos": 255,
+            "NumEnd": 257,
+            "Literal": "60",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 260,
+    "StatementEnd": 310,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 267,
+          "NumEnd": 268,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": {
+      "SettingsPos": 269,
+      "ListEnd": 283,
+      "Items": [
+        {
+          "SettingsPos": 278,
+          "Name": {
+            "Name": "a",
+            "QuoteType": 1,
+            "NamePos": 278,
+            "NameEnd": 279
+          },
+          "Expr": {
+            "NumPos": 282,
+            "NumEnd": 283,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 284,
+      "Format": {
+        "Name": "JSON",
+        "QuoteType": 1,
+        "NamePos": 291,
+        "NameEnd": 295
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 296,
+      "ListEnd": 310,
+      "Items": [
+        {
+          "SettingsPos": 305,
+          "Name": {
+            "Name": "b",
+            "QuoteType": 1,
+            "NamePos": 305,
+            "NameEnd": 306
+          },
+          "Expr": {
+            "NumPos": 309,
+            "NumEnd": 310,
+            "Literal": "2",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 313,
+    "StatementEnd": 321,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 320,
+          "NumEnd": 321,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": null,
+    "FormatSettings": null,
+    "Union": {
+      "SelectPos": 332,
+      "StatementEnd": 367,
+      "With": null,
+      "Top": null,
+      "HasDistinct": false,
+      "DistinctOn": null,
+      "SelectItems": [
+        {
+          "Expr": {
+            "NumPos": 339,
+            "NumEnd": 340,
+            "Literal": "2",
+            "Base": 10
+          },
+          "Modifiers": [],
+          "Alias": null
+        }
+      ],
+      "From": null,
+      "Window": null,
+      "Prewhere": null,
+      "Where": null,
+      "GroupBy": null,
+      "WithTotal": false,
+      "Having": null,
+      "OrderBy": null,
+      "LimitBy": null,
+      "Limit": null,
+      "Settings": null,
+      "HasParen": false,
+      "OuterSettings": null,
+      "Format": {
+        "FormatPos": 341,
+        "Format": {
+          "Name": "JSON",
+          "QuoteType": 1,
+          "NamePos": 348,
+          "NameEnd": 352
+        }
+      },
+      "FormatSettings": {
+        "SettingsPos": 353,
+        "ListEnd": 367,
+        "Items": [
+          {
+            "SettingsPos": 362,
+            "Name": {
+              "Name": "a",
+              "QuoteType": 1,
+              "NamePos": 362,
+              "NameEnd": 363
+            },
+            "Expr": {
+              "NumPos": 366,
+              "NumEnd": 367,
+              "Literal": "1",
+              "Base": 10
+            }
+          }
+        ]
+      },
+      "Union": null,
+      "UnionMode": "",
+      "Except": null,
+      "ExceptMode": "",
+      "Intersect": null,
+      "IntersectMode": ""
+    },
+    "UnionMode": "ALL",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 370,
+    "StatementEnd": 464,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 377,
+          "NumEnd": 378,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 379,
+      "Format": {
+        "Name": "JSON",
+        "QuoteType": 1,
+        "NamePos": 386,
+        "NameEnd": 390
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 391,
+      "ListEnd": 464,
+      "Items": [
+        {
+          "SettingsPos": 400,
+          "Name": {
+            "Name": "hdx_query_admin_comment",
+            "QuoteType": 1,
+            "NamePos": 400,
+            "NameEnd": 423
+          },
+          "Expr": {
+            "LiteralPos": 427,
+            "LiteralEnd": 442,
+            "Literal": "it''s a comment"
+          }
+        },
+        {
+          "SettingsPos": 445,
+          "Name": {
+            "Name": "a",
+            "QuoteType": 1,
+            "NamePos": 445,
+            "NameEnd": 446
+          },
+          "Expr": {
+            "LiteralPos": 451,
+            "LiteralEnd": 464,
+            "Literal": "dollar quoted"
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 469,
+    "StatementEnd": 568,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "Name": "*",
+          "QuoteType": 0,
+          "NamePos": 476,
+          "NameEnd": 476
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": {
+      "FromPos": 478,
+      "Expr": {
+        "Table": {
+          "TablePos": 483,
+          "TableEnd": 493,
+          "Alias": null,
+          "Expr": {
+            "Database": null,
+            "Table": {
+              "Name": "test_table",
+              "QuoteType": 1,
+              "NamePos": 483,
+              "NameEnd": 493
+            }
+          },
+          "HasFinal": false
+        },
+        "StatementEnd": 493,
+        "SampleRatio": null,
+        "HasFinal": false
+      }
+    },
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 494,
+      "Format": {
+        "Name": "TSV",
+        "QuoteType": 1,
+        "NamePos": 501,
+        "NameEnd": 504
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 505,
+      "ListEnd": 568,
+      "Items": [
+        {
+          "SettingsPos": 514,
+          "Name": {
+            "Name": "additional_table_filters",
+            "QuoteType": 1,
+            "NamePos": 514,
+            "NameEnd": 538
+          },
+          "Expr": {
+            "LBracePos": 541,
+            "RBracePos": 568,
+            "KeyValues": [
+              {
+                "Key": {
+                  "LiteralPos": 543,
+                  "LiteralEnd": 553,
+                  "Literal": "test_table"
+                },
+                "Value": {
+                  "LiteralPos": 557,
+                  "LiteralEnd": 567,
+                  "Literal": "status = 1"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  }
+]

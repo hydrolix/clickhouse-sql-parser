@@ -1168,30 +1168,39 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 	if err != nil {
 		return nil, err
 	}
+	var formatSettings *SettingsClause
 	if format != nil {
 		statementEnd = format.End()
+		formatSettings, err = p.tryParseSettingsClause(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		if formatSettings != nil {
+			statementEnd = formatSettings.End()
+		}
 	}
 
 	return &SelectQuery{
-		With:         withClause,
-		SelectPos:    pos,
-		StatementEnd: statementEnd,
-		Top:          top,
-		HasDistinct:  hasDistinct,
-		DistinctOn:   distinctOn,
-		SelectItems:  selectItems,
-		From:         from,
-		Window:       window,
-		Prewhere:     prewhere,
-		Where:        where,
-		GroupBy:      groupBy,
-		Having:       having,
-		OrderBy:      orderBy,
-		LimitBy:      limitBy,
-		Limit:        limit,
-		Settings:     settings,
-		Format:       format,
-		WithTotal:    withTotal,
+		With:           withClause,
+		SelectPos:      pos,
+		StatementEnd:   statementEnd,
+		Top:            top,
+		HasDistinct:    hasDistinct,
+		DistinctOn:     distinctOn,
+		SelectItems:    selectItems,
+		From:           from,
+		Window:         window,
+		Prewhere:       prewhere,
+		Where:          where,
+		GroupBy:        groupBy,
+		Having:         having,
+		OrderBy:        orderBy,
+		LimitBy:        limitBy,
+		Limit:          limit,
+		Settings:       settings,
+		Format:         format,
+		WithTotal:      withTotal,
+		FormatSettings: formatSettings,
 	}, nil
 }
 
