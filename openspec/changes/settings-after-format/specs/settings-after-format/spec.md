@@ -55,6 +55,6 @@ clause after `FORMAT`. `Walk` and `SelectQuery.Accept` SHALL visit
   formatting the re-parsed output yields the same text
 
 #### Scenario: Walk visits the clause
-- **WHEN** `parser.Walk` runs over `SELECT 1 FORMAT JSON SETTINGS a = now()`
-- **THEN** the walk function receives the `*SettingsClause` and the
-  `*FunctionExpr` for `now`
+- **WHEN** `parser.Walk` runs over `SELECT 1 FORMAT JSON SETTINGS a = 7`
+- **THEN** the walk function receives the `*SettingsClause`, the
+  `*SettingExpr` and the `*NumberLiteral` for `7`
