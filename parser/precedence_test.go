@@ -29,7 +29,10 @@ func parseSelectItemExpr(t *testing.T, sql string) Expr {
 // table function in its FROM clause.
 func parseTableFunctionExpr(t *testing.T, sql string) *TableFunctionExpr {
 	t.Helper()
-	from := parseOneStmt(t, sql).(*SelectQuery).From.Expr
+	selectQuery, ok := parseOneStmt(t, sql).(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery for %s", sql)
+	require.NotNil(t, selectQuery.From, sql)
+	from := selectQuery.From.Expr
 	table, ok := from.(*JoinTableExpr)
 	require.True(t, ok, "%s: expected *JoinTableExpr in FROM, got %T", sql, from)
 	fn, ok := table.Table.Expr.(*TableFunctionExpr)
