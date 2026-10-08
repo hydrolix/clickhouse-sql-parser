@@ -37,6 +37,7 @@
     "HasParen": false,
     "OuterSettings": null,
     "Format": null,
+    "FormatSettings": null,
     "Union": {
       "SelectPos": 25,
       "StatementEnd": 39,
@@ -75,6 +76,7 @@
       "HasParen": false,
       "OuterSettings": null,
       "Format": null,
+      "FormatSettings": null,
       "Union": {
         "SelectPos": 50,
         "StatementEnd": 64,
@@ -113,6 +115,7 @@
         "HasParen": false,
         "OuterSettings": null,
         "Format": null,
+        "FormatSettings": null,
         "Union": null,
         "UnionMode": "",
         "Except": null,

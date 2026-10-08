@@ -2342,6 +2342,10 @@ func (s *SelectQuery) FormatSQL(formatter *Formatter) {
 		formatter.Break()
 		formatter.WriteExpr(s.Format)
 	}
+	if s.FormatSettings != nil {
+		formatter.Break()
+		formatter.WriteExpr(s.FormatSettings)
+	}
 	if s.Union != nil {
 		formatter.Break()
 		switch s.UnionMode { //nolint:exhaustive

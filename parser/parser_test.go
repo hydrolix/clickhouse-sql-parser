@@ -730,3 +730,125 @@ func TestMatchVariable_QuotingMatrix(t *testing.T) {
 		})
 	}
 }
+
+func parseSelectForTest(t *testing.T, sql string) *SelectQuery {
+	t.Helper()
+	stmts, err := NewParser(sql).ParseStmts()
+	require.NoError(t, err, sql)
+	require.Len(t, stmts, 1, sql)
+	query, ok := stmts[0].(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery for %s, got %T", sql, stmts[0])
+	return query
+}
+
+func settingNames(clause *SettingsClause) []string {
+	names := make([]string, 0, len(clause.Items))
+	for _, item := range clause.Items {
+		names = append(names, item.Name.Name)
+	}
+	return names
+}
+
+// Covers the settings-after-format spec: a SETTINGS clause after FORMAT lands
+// in SelectQuery.FormatSettings, never in Settings.
+func TestParser_With_FormatSettings(t *testing.T) {
+	t.Run("after format", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 FORMAT JSON SETTINGS max_threads = 1")
+		require.NotNil(t, q.Format)
+		require.NotNil(t, q.FormatSettings)
+		require.Equal(t, []string{"max_threads"}, settingNames(q.FormatSettings))
+		require.Nil(t, q.Settings)
+	})
+
+	t.Run("production query", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT count() AS n FROM hydro.logs WHERE timestamp >= now() - toIntervalHour(1) GROUP BY app ORDER BY n DESC FORMAT CSVWithNames SETTINGS hdx_query_max_timerange_sec = 86400, hdx_query_max_execution_time = 60")
+		require.NotNil(t, q.FormatSettings)
+		require.Len(t, q.FormatSettings.Items, 2)
+	})
+
+	t.Run("before format is unchanged", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS max_threads = 1 FORMAT JSON")
+		require.NotNil(t, q.Settings)
+		require.Len(t, q.Settings.Items, 1)
+		require.Nil(t, q.FormatSettings)
+	})
+
+	t.Run("both positions are kept", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS a = 1 FORMAT JSON SETTINGS b = 2")
+		require.Equal(t, []string{"a"}, settingNames(q.Settings))
+		require.Equal(t, []string{"b"}, settingNames(q.FormatSettings))
+	})
+
+	t.Run("trailing leg of a set operation owns it", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 UNION ALL SELECT 2 FORMAT JSON SETTINGS a = 1")
+		require.Nil(t, q.FormatSettings)
+		require.NotNil(t, q.Union)
+		require.Equal(t, []string{"a"}, settingNames(q.Union.FormatSettings))
+	})
+
+	t.Run("settings without format cannot repeat", func(t *testing.T) {
+		_, err := NewParser("SELECT 1 SETTINGS a = 1 SETTINGS b = 2").ParseStmts()
+		require.Error(t, err)
+	})
+
+	t.Run("settings cannot repeat after format", func(t *testing.T) {
+		_, err := NewParser("SELECT 1 FORMAT JSON SETTINGS a = 1 SETTINGS b = 2").ParseStmts()
+		require.Error(t, err)
+	})
+
+	t.Run("positions cover the clause", func(t *testing.T) {
+		sql := "SELECT 1 FORMAT JSON SETTINGS a = 'x'"
+		q := parseSelectForTest(t, sql)
+		require.Equal(t, Pos(strings.Index(sql, "SETTINGS")), q.FormatSettings.SettingsPos)
+		last := q.FormatSettings.Items[len(q.FormatSettings.Items)-1]
+		require.GreaterOrEqual(t, q.StatementEnd, last.End())
+		require.Equal(t, q.FormatSettings.End(), q.StatementEnd)
+	})
+
+	t.Run("round trip keeps the order", func(t *testing.T) {
+		sql := "SELECT 1 FORMAT JSON SETTINGS max_threads = 1"
+		want := "SELECT 1 FORMAT JSON SETTINGS max_threads=1"
+		got := Format(parseSelectForTest(t, sql))
+		require.Equal(t, want, got)
+		require.Equal(t, want, Format(parseSelectForTest(t, got)))
+		beautifier := NewFormatter().WithBeautify()
+		beautifier.WriteExpr(parseSelectForTest(t, sql))
+		require.Contains(t, beautifier.String(), "FORMAT JSON\nSETTINGS\n  max_threads=1")
+	})
+
+	t.Run("walk visits the clause", func(t *testing.T) {
+		// The settings value grammar accepts literals only (not function
+		// calls), so the walk is checked down to the value literal.
+		q := parseSelectForTest(t, "SELECT 1 FORMAT JSON SETTINGS a = 7")
+		var sawClause, sawItem, sawValue bool
+		Walk(q, func(node Expr) bool {
+			switch n := node.(type) {
+			case *SettingsClause:
+				sawClause = true
+			case *SettingExpr:
+				sawItem = true
+			case *NumberLiteral:
+				if n.Literal == "7" {
+					sawValue = true
+				}
+			}
+			return true
+		})
+		require.True(t, sawClause, "Walk should visit the *SettingsClause")
+		require.True(t, sawItem, "Walk should visit the *SettingExpr")
+		require.True(t, sawValue, "Walk should visit the setting value")
+	})
+
+	t.Run("accept visits the clause", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 FORMAT JSON SETTINGS a = 1")
+		settings := 0
+		v := &DefaultASTVisitor{Visit: func(expr Expr) error {
+			if _, ok := expr.(*SettingsClause); ok {
+				settings++
+			}
+			return nil
+		}}
+		require.NoError(t, q.Accept(v))
+		require.Equal(t, 1, settings)
+	})
+}
