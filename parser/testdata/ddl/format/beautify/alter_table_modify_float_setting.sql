@@ -1,0 +1,8 @@
+-- Origin SQL:
+ALTER TABLE t MODIFY SETTING x = 0.5;
+
+
+-- Beautify SQL:
+ALTER TABLE t
+MODIFY SETTING
+  x=0.5;

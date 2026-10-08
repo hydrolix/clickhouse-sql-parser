@@ -1,0 +1,6 @@
+-- Origin SQL:
+ALTER TABLE t MODIFY SETTING x = 0.5;
+
+
+-- Format SQL:
+ALTER TABLE t MODIFY SETTING x=0.5;
