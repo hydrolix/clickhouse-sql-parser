@@ -1292,7 +1292,7 @@ func (p *Parser) parseSettingsExpr(pos Pos) (*SettingExpr, error) {
 
 	var expr Expr
 	switch {
-	case p.matchTokenKind(TokenKindInt):
+	case p.matchTokenKind(TokenKindInt), p.matchTokenKind(TokenKindFloat), p.matchTokenKind(TokenKindDot):
 		number, err := p.parseNumber(p.Pos())
 		if err != nil {
 			return nil, err

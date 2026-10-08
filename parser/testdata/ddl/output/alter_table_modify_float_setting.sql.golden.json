@@ -1,0 +1,39 @@
+[
+  {
+    "AlterPos": 0,
+    "StatementEnd": 36,
+    "TableIdentifier": {
+      "Database": null,
+      "Table": {
+        "Name": "t",
+        "QuoteType": 1,
+        "NamePos": 12,
+        "NameEnd": 13
+      }
+    },
+    "OnCluster": null,
+    "AlterExprs": [
+      {
+        "ModifyPos": 14,
+        "StatementEnd": 36,
+        "Settings": [
+          {
+            "SettingsPos": 29,
+            "Name": {
+              "Name": "x",
+              "QuoteType": 1,
+              "NamePos": 29,
+              "NameEnd": 30
+            },
+            "Expr": {
+              "NumPos": 33,
+              "NumEnd": 36,
+              "Literal": "0.5",
+              "Base": 10
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

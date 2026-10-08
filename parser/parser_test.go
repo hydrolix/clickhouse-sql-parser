@@ -852,3 +852,108 @@ func TestParser_With_FormatSettings(t *testing.T) {
 		require.Equal(t, 1, settings)
 	})
 }
+
+func settingNumber(t *testing.T, item *SettingExpr, literal string) {
+	t.Helper()
+	num, ok := item.Expr.(*NumberLiteral)
+	require.True(t, ok, "expected *NumberLiteral, got %T", item.Expr)
+	require.Equal(t, literal, num.Literal)
+}
+
+// Covers the settings-float-values spec: decimal float literals are accepted
+// as SETTINGS values and keep their source text.
+func TestParser_With_FloatSettings(t *testing.T) {
+	t.Run("Float value in SELECT SETTINGS", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS max_bytes_ratio_before_external_group_by = 0.5")
+		require.Len(t, q.Settings.Items, 1)
+		settingNumber(t, q.Settings.Items[0], "0.5")
+	})
+
+	t.Run("Float forms keep their source text", func(t *testing.T) {
+		for _, value := range []string{"-0.5", "+0.5", ".5", "1.", "1.5e-3"} {
+			t.Run(value, func(t *testing.T) {
+				q := parseSelectForTest(t, "SELECT 1 SETTINGS x = "+value)
+				require.Len(t, q.Settings.Items, 1)
+				settingNumber(t, q.Settings.Items[0], value)
+			})
+		}
+	})
+
+	t.Run("Float mixed with other values", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS a = 0.5, b = 1, c = 'x'")
+		require.Len(t, q.Settings.Items, 3)
+		settingNumber(t, q.Settings.Items[0], "0.5")
+	})
+
+	t.Run("Float after FORMAT", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 FORMAT JSON SETTINGS x = 0.5")
+		require.Len(t, q.FormatSettings.Items, 1)
+		settingNumber(t, q.FormatSettings.Items[0], "0.5")
+	})
+
+	t.Run("Float in SET", func(t *testing.T) {
+		stmts, err := NewParser("SET x = 0.5").ParseStmts()
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		set, ok := stmts[0].(*SetStmt)
+		require.True(t, ok, "got %T", stmts[0])
+		require.Equal(t, []string{"x"}, settingNames(set.Settings))
+		settingNumber(t, set.Settings.Items[0], "0.5")
+	})
+
+	t.Run("Float in DDL settings lists", func(t *testing.T) {
+		stmts, err := NewParser("CREATE TABLE t (a Int32) ENGINE = MergeTree ORDER BY a SETTINGS x = 0.5").ParseStmts()
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		create, ok := stmts[0].(*CreateTable)
+		require.True(t, ok, "got %T", stmts[0])
+		require.NotNil(t, create.Engine.Settings)
+		settingNumber(t, create.Engine.Settings.Items[0], "0.5")
+
+		stmts, err = NewParser("ALTER TABLE t MODIFY SETTING x = 0.5").ParseStmts()
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		alter, ok := stmts[0].(*AlterTable)
+		require.True(t, ok, "got %T", stmts[0])
+		require.Len(t, alter.AlterExprs, 1)
+		modify, ok := alter.AlterExprs[0].(*AlterTableModifySetting)
+		require.True(t, ok, "got %T", alter.AlterExprs[0])
+		require.Len(t, modify.Settings, 1)
+		settingNumber(t, modify.Settings[0], "0.5")
+	})
+
+	t.Run("Positions cover the float token", func(t *testing.T) {
+		sql := "SELECT 1 SETTINGS x = -0.5"
+		q := parseSelectForTest(t, sql)
+		value := q.Settings.Items[0].Expr
+		require.Equal(t, Pos(strings.Index(sql, "-0.5")), value.Pos())
+		require.Equal(t, Pos(len(sql)), value.End())
+		require.Equal(t, value.End(), q.Settings.ListEnd)
+	})
+
+	t.Run("Leading-dot position starts at the dot", func(t *testing.T) {
+		sql := "SELECT 1 SETTINGS x = .5"
+		q := parseSelectForTest(t, sql)
+		value := q.Settings.Items[0].Expr
+		require.Equal(t, Pos(strings.Index(sql, ".5")), value.Pos())
+		require.Equal(t, Pos(len(sql)), value.End())
+	})
+
+	t.Run("Integer value is unchanged", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS x = -1")
+		settingNumber(t, q.Settings.Items[0], "-1")
+	})
+
+	t.Run("Non-number value still errors", func(t *testing.T) {
+		_, err := NewParser("SELECT 1 SETTINGS x = (1)").ParseStmts()
+		require.Error(t, err)
+	})
+
+	t.Run("Round trip keeps the literal", func(t *testing.T) {
+		sql := "SELECT 1 SETTINGS a = 0.5, b = .5, c = 1.5e-3"
+		want := "SELECT 1 SETTINGS a=0.5, b=.5, c=1.5e-3"
+		got := Format(parseSelectForTest(t, sql))
+		require.Equal(t, want, got)
+		require.Equal(t, want, Format(parseSelectForTest(t, got)))
+	})
+}

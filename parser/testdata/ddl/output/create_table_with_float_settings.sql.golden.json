@@ -1,0 +1,111 @@
+[
+  {
+    "CreatePos": 0,
+    "StatementEnd": 71,
+    "OrReplace": false,
+    "Name": {
+      "Database": null,
+      "Table": {
+        "Name": "t",
+        "QuoteType": 1,
+        "NamePos": 13,
+        "NameEnd": 14
+      }
+    },
+    "IfNotExists": false,
+    "UUID": null,
+    "OnCluster": null,
+    "TableSchema": {
+      "SchemaPos": 15,
+      "SchemaEnd": 23,
+      "Columns": [
+        {
+          "NamePos": 16,
+          "ColumnEnd": 23,
+          "Name": {
+            "Ident": {
+              "Name": "a",
+              "QuoteType": 1,
+              "NamePos": 16,
+              "NameEnd": 17
+            },
+            "DotIdent": null
+          },
+          "Type": {
+            "Name": {
+              "Name": "Int32",
+              "QuoteType": 1,
+              "NamePos": 18,
+              "NameEnd": 23
+            }
+          },
+          "NotNull": null,
+          "Nullable": null,
+          "DefaultExpr": null,
+          "MaterializedExpr": null,
+          "AliasExpr": null,
+          "Codec": null,
+          "TTL": null,
+          "Comment": null,
+          "CompressionCodec": null
+        }
+      ],
+      "AliasTable": null,
+      "TableFunction": null
+    },
+    "Engine": {
+      "EnginePos": 25,
+      "EngineEnd": 71,
+      "Name": "MergeTree",
+      "Params": null,
+      "PrimaryKey": null,
+      "PartitionBy": null,
+      "SampleBy": null,
+      "TTL": null,
+      "Settings": {
+        "SettingsPos": 55,
+        "ListEnd": 71,
+        "Items": [
+          {
+            "SettingsPos": 64,
+            "Name": {
+              "Name": "x",
+              "QuoteType": 1,
+              "NamePos": 64,
+              "NameEnd": 65
+            },
+            "Expr": {
+              "NumPos": 68,
+              "NumEnd": 71,
+              "Literal": "0.5",
+              "Base": 10
+            }
+          }
+        ]
+      },
+      "OrderBy": {
+        "OrderPos": 44,
+        "ListEnd": 54,
+        "Items": [
+          {
+            "OrderPos": 44,
+            "Expr": {
+              "Name": "a",
+              "QuoteType": 1,
+              "NamePos": 53,
+              "NameEnd": 54
+            },
+            "Alias": null,
+            "Direction": "",
+            "Fill": null
+          }
+        ],
+        "Interpolate": null
+      }
+    },
+    "SubQuery": null,
+    "TableFunction": null,
+    "HasTemporary": false,
+    "Comment": null
+  }
+]

@@ -1,0 +1,26 @@
+[
+  {
+    "SetPos": 0,
+    "Settings": {
+      "SettingsPos": 4,
+      "ListEnd": 11,
+      "Items": [
+        {
+          "SettingsPos": 4,
+          "Name": {
+            "Name": "x",
+            "QuoteType": 1,
+            "NamePos": 4,
+            "NameEnd": 5
+          },
+          "Expr": {
+            "NumPos": 8,
+            "NumEnd": 11,
+            "Literal": "0.5",
+            "Base": 10
+          }
+        }
+      ]
+    }
+  }
+]
