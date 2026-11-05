@@ -623,7 +623,7 @@ func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 		return p.parseColumnCastExpr(pos)
 	case p.matchKeyword(KeywordCase):
 		return p.parseColumnCaseExpr(pos)
-	case p.matchKeyword(KeywordSelect):
+	case p.matchKeyword(KeywordSelect), p.matchKeyword(KeywordWith):
 		return p.parseSelectQuery(pos)
 	case p.matchKeyword(KeywordExtract):
 		return p.parseColumnExtractExpr(pos)
@@ -641,10 +641,8 @@ func (p *Parser) parseColumnExpr(pos Pos) (Expr, error) { //nolint:funlen
 		p.matchTokenKind(TokenKindFloat): // number literal
 		return p.parseNumber(pos)
 	case p.matchTokenKind(TokenKindLParen):
-		if peek, _ := p.lexer.peekToken(); peek != nil {
-			if peek.Kind == TokenKindKeyword && strings.EqualFold(peek.String, KeywordSelect) {
-				return p.parseSubQuery(pos)
-			}
+		if p.peekKeyword(KeywordSelect) || p.peekKeyword(KeywordWith) {
+			return p.parseSubQuery(pos)
 		}
 		return p.parseFunctionParams(p.Pos())
 	case p.matchTokenKind("*"):
