@@ -1,0 +1,162 @@
+[
+  {
+    "SelectPos": 0,
+    "StatementEnd": 51,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 7,
+          "NumEnd": 8,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": {
+      "SettingsPos": 9,
+      "ListEnd": 51,
+      "Items": [
+        {
+          "SettingsPos": 18,
+          "Name": {
+            "Name": "limit",
+            "QuoteType": 1,
+            "NamePos": 18,
+            "NameEnd": 23
+          },
+          "Expr": {
+            "NumPos": 26,
+            "NumEnd": 27,
+            "Literal": "5",
+            "Base": 10
+          }
+        },
+        {
+          "SettingsPos": 29,
+          "Name": {
+            "Name": "offset",
+            "QuoteType": 1,
+            "NamePos": 29,
+            "NameEnd": 35
+          },
+          "Expr": {
+            "NumPos": 38,
+            "NumEnd": 40,
+            "Literal": "10",
+            "Base": 10
+          }
+        },
+        {
+          "SettingsPos": 42,
+          "Name": {
+            "Name": "final",
+            "QuoteType": 1,
+            "NamePos": 42,
+            "NameEnd": 47
+          },
+          "Expr": {
+            "NumPos": 50,
+            "NumEnd": 51,
+            "Literal": "1",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": null,
+    "FormatSettings": null,
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  },
+  {
+    "SelectPos": 53,
+    "StatementEnd": 92,
+    "With": null,
+    "Top": null,
+    "HasDistinct": false,
+    "DistinctOn": null,
+    "SelectItems": [
+      {
+        "Expr": {
+          "NumPos": 60,
+          "NumEnd": 61,
+          "Literal": "1",
+          "Base": 10
+        },
+        "Modifiers": [],
+        "Alias": null
+      }
+    ],
+    "From": null,
+    "Window": null,
+    "Prewhere": null,
+    "Where": null,
+    "GroupBy": null,
+    "WithTotal": false,
+    "Having": null,
+    "OrderBy": null,
+    "LimitBy": null,
+    "Limit": null,
+    "Settings": null,
+    "HasParen": false,
+    "OuterSettings": null,
+    "Format": {
+      "FormatPos": 62,
+      "Format": {
+        "Name": "JSON",
+        "QuoteType": 1,
+        "NamePos": 69,
+        "NameEnd": 73
+      }
+    },
+    "FormatSettings": {
+      "SettingsPos": 74,
+      "ListEnd": 92,
+      "Items": [
+        {
+          "SettingsPos": 83,
+          "Name": {
+            "Name": "limit",
+            "QuoteType": 1,
+            "NamePos": 83,
+            "NameEnd": 88
+          },
+          "Expr": {
+            "NumPos": 91,
+            "NumEnd": 92,
+            "Literal": "5",
+            "Base": 10
+          }
+        }
+      ]
+    },
+    "Union": null,
+    "UnionMode": "",
+    "Except": null,
+    "ExceptMode": "",
+    "Intersect": null,
+    "IntersectMode": ""
+  }
+]
