@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 func (p *Parser) parseDDL(pos Pos) (DDL, error) {
@@ -12,7 +13,7 @@ func (p *Parser) parseDDL(pos Pos) (DDL, error) {
 		_ = p.lexer.consumeToken()
 		orReplace := p.tryConsumeKeywords(KeywordOr, KeywordReplace)
 		if orReplace && !p.matchOneOfKeywords(KeywordTemporary, KeywordTable, KeywordView, KeywordFunction, KeywordDictionary) {
-			return nil, fmt.Errorf("expected keyword: TEMPORARY|TABLE|VIEW|FUNCTION|DICTIONARY, but got %q", p.last().String)
+			return nil, fmt.Errorf("expected keyword: TEMPORARY|TABLE|VIEW|FUNCTION|DICTIONARY, but got %q", p.currentTokenString())
 		}
 		switch {
 		case p.matchKeyword(KeywordNamed):
@@ -38,7 +39,7 @@ func (p *Parser) parseDDL(pos Pos) (DDL, error) {
 			return p.parseCreateUser(pos)
 		default:
 			return nil, fmt.Errorf("expected keyword: NAMED|DATABASE|DICTIONARY|TABLE|VIEW|ROLE|USER|FUNCTION|MATERIALIZED, but got %q",
-				p.lastTokenKind())
+				p.currentTokenKind())
 		}
 	case p.matchKeyword(KeywordAlter):
 		_ = p.lexer.consumeToken()
@@ -48,7 +49,7 @@ func (p *Parser) parseDDL(pos Pos) (DDL, error) {
 		case p.matchKeyword(KeywordTable):
 			return p.parseAlterTable(pos)
 		default:
-			return nil, fmt.Errorf("expected keyword: TABLE|ROLE, but got %q", p.last().String)
+			return nil, fmt.Errorf("expected keyword: TABLE|ROLE, but got %q", p.currentTokenString())
 		}
 	case p.matchKeyword(KeywordDrop),
 		p.matchKeyword(KeywordDetach):
@@ -65,7 +66,7 @@ func (p *Parser) parseDDL(pos Pos) (DDL, error) {
 			p.matchKeyword(KeywordRole):
 			return p.parserDropUserOrRole(pos)
 		default:
-			return nil, fmt.Errorf("expected keyword: DATABASE|TABLE, but got %q", p.last().String)
+			return nil, fmt.Errorf("expected keyword: DATABASE|TABLE, but got %q", p.currentTokenString())
 		}
 	case p.matchKeyword(KeywordTruncate):
 		return p.parseTruncateTable(pos)
@@ -284,7 +285,7 @@ func (p *Parser) parseNamedCollectionParam(pos Pos) (*NamedCollectionParam, erro
 		}
 		value = ident
 	default:
-		return nil, fmt.Errorf("expected string, number or identifier in named collection parameter, got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected string, number or identifier in named collection parameter, got %s", p.currentTokenKind())
 	}
 
 	param := &NamedCollectionParam{
@@ -384,10 +385,10 @@ func (p *Parser) parseCreateTable(pos Pos, orReplace bool) (*CreateTable, error)
 				createTable.TableFunction = tableFunc
 				createTable.StatementEnd = tableFunc.End()
 			} else {
-				return nil, fmt.Errorf("expected ( after identifier in AS clause, got %q", p.lastTokenKind())
+				return nil, fmt.Errorf("expected ( after identifier in AS clause, got %q", p.currentTokenKind())
 			}
 		} else {
-			return nil, fmt.Errorf("expected SELECT, WITH or identifier after AS, got %q", p.lastTokenKind())
+			return nil, fmt.Errorf("expected SELECT, WITH or identifier after AS, got %q", p.currentTokenKind())
 		}
 	}
 
@@ -400,7 +401,15 @@ func (p *Parser) parseCreateTable(pos Pos, orReplace bool) (*CreateTable, error)
 }
 
 func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
-	ident, err := p.parseIdent()
+	var ident *Ident
+	var err error
+	if p.matchTokenKind(TokenKindKeyword) && p.peekTokenKind(TokenKindLParen) {
+		// reserved operator keywords stay callable as ordinary functions:
+		// and(a, b), or(a, b), in(x, set), like(s, pat), ...
+		ident, err = p.parseAnyKeyword()
+	} else {
+		ident, err = p.parseIdent()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -415,7 +424,12 @@ func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
 			Params: params,
 		}, nil
 	case p.matchTokenKind(TokenKindLParen):
-		params, err := p.parseFunctionParams(p.Pos())
+		var params *ParamExprList
+		if form, ok := keywordArgFunctions[strings.ToUpper(ident.Name)]; ok {
+			params, err = p.parseKeywordArgFunctionParams(p.Pos(), form)
+		} else {
+			params, err = p.parseFunctionParams(p.Pos())
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -428,15 +442,18 @@ func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
 		if p.tryConsumeKeywords(KeywordOver) {
 			var overExpr Expr
 			switch {
-			case p.matchTokenKind(TokenKindIdent):
-				overExpr, err = p.parseIdent()
+			case p.matchTokenKind(TokenKindIdent, TokenKindKeyword):
+				// After OVER a bare token can only be a window name, so even
+				// reserved keywords are accepted (e.g. `OVER order`),
+				// mirroring the WINDOW clause definition side.
+				overExpr, err = p.parseAnyKeyword()
 			case p.matchTokenKind(TokenKindLParen):
 				overExpr, err = p.parseWindowCondition(p.Pos())
 				if err != nil {
 					return nil, err
 				}
 			default:
-				return nil, fmt.Errorf("expected window name or (, but got %q", p.lastTokenKind())
+				return nil, fmt.Errorf("expected window name or (, but got %q", p.currentTokenKind())
 			}
 
 			if err != nil {
@@ -451,10 +468,12 @@ func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
 		return funcExpr, nil
 	case p.tryConsumeTokenKind(TokenKindDot) != nil:
 		switch {
-		case p.matchTokenKind(TokenKindIdent):
+		case p.matchTokenKind(TokenKindIdent, TokenKindKeyword):
 			fields := []*Ident{ident}
 			for {
-				child, err := p.parseIdent()
+				// After a dot the token can only be a member name, so even
+				// reserved keywords are accepted (e.g. `t.from`).
+				child, err := p.parseAnyKeyword()
 				if err != nil {
 					return nil, err
 				}
@@ -484,7 +503,7 @@ func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
 				Index:     i,
 			}, nil
 		default:
-			return nil, fmt.Errorf("expected IDENT, NUMBER or *, but got %q", p.lastTokenKind())
+			return nil, fmt.Errorf("expected IDENT, NUMBER or *, but got %q", p.currentTokenKind())
 		}
 	}
 	return ident, nil
@@ -679,19 +698,23 @@ func (p *Parser) parseTableColumnExpr(pos Pos) (*ColumnDef, error) {
 		columnEnd = notNull.End()
 	}
 
+	var valueExpr Expr
 	switch {
 	case p.tryConsumeKeywords(KeywordDefault):
 		column.DefaultExpr, err = p.parseExpr(p.Pos())
-		columnEnd = column.DefaultExpr.End()
+		valueExpr = column.DefaultExpr
 	case p.tryConsumeKeywords(KeywordMaterialized):
 		column.MaterializedExpr, err = p.parseExpr(p.Pos())
-		columnEnd = column.MaterializedExpr.End()
+		valueExpr = column.MaterializedExpr
 	case p.tryConsumeKeywords(KeywordAlias):
 		column.AliasExpr, err = p.parseExpr(p.Pos())
-		columnEnd = column.AliasExpr.End()
+		valueExpr = column.AliasExpr
 	}
 	if err != nil {
 		return nil, err
+	}
+	if valueExpr != nil {
+		columnEnd = valueExpr.End()
 	}
 
 	comment, err := p.tryParseColumnComment(p.Pos())
@@ -737,6 +760,12 @@ func (p *Parser) parseTableArgExpr(pos Pos) (Expr, error) {
 
 func (p *Parser) parseTableArgPrimaryExpr(pos Pos) (Expr, error) {
 	switch {
+	case p.matchKeyword(KeywordCast):
+		// CAST has its own syntax, so reading it as an ordinary function call
+		// stops at the AS separator: numbers(CAST(1 + 1 AS UInt64)) failed
+		// looking for ')'. CAST is not reserved, so it also matches
+		// TokenKindIdent and this case has to come first.
+		return p.parseColumnCastExpr(pos)
 	case p.matchTokenKind(TokenKindIdent):
 		ident, err := p.parseIdent()
 		if err != nil {
@@ -778,7 +807,7 @@ func (p *Parser) parseTableArgPrimaryExpr(pos Pos) (Expr, error) {
 		p.matchTokenKind(TokenKindString), p.matchKeyword(KeywordNull):
 		return p.parseLiteral(p.Pos())
 	default:
-		return nil, fmt.Errorf("unexpected token: %q, expected <Name>, <literal>", p.last().String)
+		return nil, fmt.Errorf("unexpected token: %q, expected <Name>, <literal>", p.currentTokenString())
 	}
 }
 
@@ -795,7 +824,7 @@ func (p *Parser) parseTableArgList(pos Pos) (*TableArgListExpr, error) {
 
 		// Try to detect named parameter pattern: last token is identifier, next token is =
 		isNamedParam := false
-		lastKind := p.lastTokenKind()
+		lastKind := p.currentTokenKind()
 		if lastKind == TokenKindIdent || lastKind == TokenKindKeyword {
 			// Last token is an identifier, peek at the next token
 			nextToken, peekErr := p.lexer.peekToken()
@@ -809,9 +838,9 @@ func (p *Parser) parseTableArgList(pos Pos) (*TableArgListExpr, error) {
 			// Parse as named parameter - the identifier is already the last token
 			// We need to get it, consume the =, and parse the value
 			name := &Ident{
-				NamePos: p.last().Pos,
-				NameEnd: p.last().End,
-				Name:    p.last().String,
+				NamePos: p.current().Pos,
+				NameEnd: p.current().End,
+				Name:    p.current().String,
 			}
 			// Consume the = token
 			if err := p.lexer.consumeToken(); err != nil {
@@ -872,7 +901,7 @@ func (p *Parser) tryParseClusterClause(pos Pos) (*ClusterClause, error) {
 	case p.matchTokenKind(TokenKindString):
 		expr, err = p.parseString(p.Pos())
 	default:
-		return nil, fmt.Errorf("unexpected token: %q, expected <IDENT> or <STRING>", p.last().String)
+		return nil, fmt.Errorf("unexpected token: %q, expected <IDENT> or <STRING>", p.currentTokenString())
 	}
 	if err != nil {
 		return nil, err
@@ -934,6 +963,29 @@ func (p *Parser) tryParseOrderByClause(pos Pos) (*OrderByClause, error) {
 	return p.parseOrderByClause(pos)
 }
 
+// tryParseTableOrderByClause parses the ORDER BY of a table engine, which gives
+// the sorting key. Unlike the ORDER BY of a query it holds a single expression:
+// a sorting key over several columns is written as a tuple.
+func (p *Parser) tryParseTableOrderByClause(pos Pos) (*OrderByClause, error) {
+	if !p.tryConsumeKeywords(KeywordOrder) {
+		return nil, nil // nolint
+	}
+
+	if err := p.expectKeyword(KeywordBy); err != nil {
+		return nil, err
+	}
+
+	sortingKey, err := p.parseOrderExpr(pos)
+	if err != nil {
+		return nil, err
+	}
+	return &OrderByClause{
+		OrderPos: pos,
+		ListEnd:  sortingKey.End(),
+		Items:    []Expr{sortingKey},
+	}, nil
+}
+
 func (p *Parser) parseOrderByClause(pos Pos) (*OrderByClause, error) {
 	orderByListExpr := &OrderByClause{OrderPos: pos, ListEnd: pos}
 	items := make([]Expr, 0)
@@ -989,7 +1041,8 @@ func (p *Parser) parseOrderExpr(pos Pos) (*OrderExpr, error) {
 		}
 		// consume the `AS` keyword
 		_ = p.lexer.consumeToken()
-		alias, err = p.parseIdent()
+		// after AS the token can only be an alias name, reserved keyword or not
+		alias, err = p.parseAnyKeyword()
 		if err != nil {
 			return nil, err
 		}
@@ -1170,10 +1223,10 @@ func (p *Parser) tryParseTTLPolicy(pos Pos) (*TTLPolicy, error) {
 			}
 			rule = &TTLPolicyRule{RulePos: pos, ToVolume: value}
 		} else {
-			return nil, fmt.Errorf("unexpected token: %q, expected DISK or VOLUME", p.lastTokenKind())
+			return nil, fmt.Errorf("unexpected token: %q, expected DISK or VOLUME", p.currentTokenKind())
 		}
 	case p.matchKeyword(KeywordDelete), p.matchKeyword(KeywordRecompress):
-		token := p.last()
+		token := p.current()
 		_ = p.lexer.consumeToken()
 		action := &TTLPolicyRuleAction{
 			ActionPos: token.Pos,
@@ -1312,12 +1365,12 @@ func (p *Parser) parseSettingsExpr(pos Pos) (*SettingExpr, error) {
 		expr = m
 	case p.matchKeyword(KeywordTrue), p.matchKeyword(KeywordFalse):
 		// Handle TRUE/FALSE keywords as boolean literals
-		lastToken := p.last()
+		curToken := p.current()
 		_ = p.lexer.consumeToken()
 		expr = &BoolLiteral{
-			LiteralPos: lastToken.Pos,
-			LiteralEnd: lastToken.End,
-			Literal:    lastToken.String,
+			LiteralPos: curToken.Pos,
+			LiteralEnd: curToken.End,
+			Literal:    curToken.String,
 		}
 	case p.matchVariable():
 		m, err := p.parseIdent()
@@ -1326,7 +1379,7 @@ func (p *Parser) parseSettingsExpr(pos Pos) (*SettingExpr, error) {
 		}
 		expr = m
 	default:
-		return nil, fmt.Errorf("unexpected token: %q, expected <number>, <bool> or <string>", p.last().String)
+		return nil, fmt.Errorf("unexpected token: %q, expected <number>, <bool> or <string>", p.currentTokenString())
 	}
 
 	return &SettingExpr{
@@ -1383,13 +1436,13 @@ func (p *Parser) parseEngineExpr(pos Pos) (*EngineExpr, error) {
 			engineExpr.EngineEnd = params.End()
 		}
 	default:
-		return nil, fmt.Errorf("unexpected token: %s", p.lastTokenKind())
+		return nil, fmt.Errorf("unexpected token: %s", p.currentTokenKind())
 	}
 
 	for !p.lexer.isEOF() {
 		switch {
 		case p.matchKeyword(KeywordOrder):
-			orderBy, err := p.tryParseOrderByClause(p.Pos())
+			orderBy, err := p.tryParseTableOrderByClause(p.Pos())
 			if err != nil {
 				return nil, err
 			}
@@ -1478,10 +1531,10 @@ func (p *Parser) parseStmt(pos Pos) (Expr, error) {
 	case p.matchKeyword(KeywordDesc), p.matchKeyword(KeywordDescribe):
 		expr, err = p.parseDescribeStmt(pos)
 	default:
-		if p.last() == nil {
+		if p.current() == nil {
 			return nil, errors.New("unexpected end of input")
 		}
-		return nil, fmt.Errorf("unexpected token: %q", p.last().String)
+		return nil, fmt.Errorf("unexpected token: %q", p.currentTokenString())
 	}
 	if err != nil {
 		return nil, err
@@ -1492,8 +1545,8 @@ func (p *Parser) parseStmt(pos Pos) (Expr, error) {
 	}
 
 	// Statement can be terminated by ';' or EOF
-	if p.last() != nil && !p.matchTokenKind(";") {
-		return nil, fmt.Errorf("<EOF> or ';' was expected, but got: %q", p.last().String)
+	if p.current() != nil && !p.matchTokenKind(";") {
+		return nil, fmt.Errorf("<EOF> or ';' was expected, but got: %q", p.currentTokenString())
 	}
 	return expr, nil
 }
@@ -1573,7 +1626,7 @@ func (p *Parser) parseShowStmt(pos Pos) (*ShowStmt, error) {
 		_ = p.lexer.consumeToken()
 
 	default:
-		return nil, fmt.Errorf("expected CREATE, DATABASES, or TABLES after SHOW, got %q", p.last().String)
+		return nil, fmt.Errorf("expected CREATE, DATABASES, or TABLES after SHOW, got %q", p.currentTokenString())
 	}
 
 	stmt := &ShowStmt{
@@ -1644,7 +1697,7 @@ func (p *Parser) parseShowStmt(pos Pos) (*ShowStmt, error) {
 				stmt.Format = format
 			} else if p.matchTokenKind(TokenKindIdent) {
 				// Handle format as identifier (like JSON, CSV, etc.)
-				token := p.last()
+				token := p.current()
 				_ = p.lexer.consumeToken()
 				stmt.Format = &StringLiteral{
 					LiteralPos: token.Pos,
@@ -1652,7 +1705,7 @@ func (p *Parser) parseShowStmt(pos Pos) (*ShowStmt, error) {
 					Literal:    token.String,
 				}
 			} else {
-				return nil, fmt.Errorf("expected format specification after FORMAT, got %q", p.last().String)
+				return nil, fmt.Errorf("expected format specification after FORMAT, got %q", p.currentTokenString())
 			}
 		}
 	}
@@ -2092,10 +2145,14 @@ func (p *Parser) parseDictionaryAttribute(pos Pos) (*DictionaryAttribute, error)
 		NamePos: pos,
 		Name:    name,
 		Type:    columnType,
+		AttrEnd: columnType.End(),
 	}
 
 	// Parse optional attribute properties
 	for {
+		// end of the property keyword about to be consumed; flag-only
+		// properties (HIERARCHICAL, ...) end at the keyword itself
+		keywordEnd := p.End()
 		switch {
 		case p.tryConsumeKeywords(KeywordDefault):
 			if attr.Default != nil {
@@ -2106,6 +2163,7 @@ func (p *Parser) parseDictionaryAttribute(pos Pos) (*DictionaryAttribute, error)
 				return nil, err
 			}
 			attr.Default = literal
+			attr.AttrEnd = literal.End()
 		case p.tryConsumeKeywords(KeywordExpression):
 			if attr.Expression != nil {
 				return nil, fmt.Errorf("duplicate EXPRESSION clause")
@@ -2115,21 +2173,25 @@ func (p *Parser) parseDictionaryAttribute(pos Pos) (*DictionaryAttribute, error)
 				return nil, err
 			}
 			attr.Expression = expr
+			attr.AttrEnd = expr.End()
 		case p.tryConsumeKeywords(KeywordHierarchical):
 			if attr.Hierarchical {
 				return nil, fmt.Errorf("duplicate HIERARCHICAL clause")
 			}
 			attr.Hierarchical = true
+			attr.AttrEnd = keywordEnd
 		case p.tryConsumeKeywords(KeywordInjective):
 			if attr.Injective {
 				return nil, fmt.Errorf("duplicate INJECTIVE clause")
 			}
 			attr.Injective = true
+			attr.AttrEnd = keywordEnd
 		case p.tryConsumeKeywords(KeywordIs_object_id):
 			if attr.IsObjectId {
 				return nil, fmt.Errorf("duplicate IS_OBJECT_ID clause")
 			}
 			attr.IsObjectId = true
+			attr.AttrEnd = keywordEnd
 		default:
 			// No more attribute properties
 			return attr, nil
@@ -2247,19 +2309,9 @@ func (p *Parser) parseDictionarySourceClause(pos Pos) (*DictionarySourceClause, 
 		return nil, err
 	}
 
-	var args []*DictionaryArgExpr
-	// Parse optional arguments
-	for !p.matchTokenKind(TokenKindRParen) {
-		arg, err := p.parseDictionaryArgExpr(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		args = append(args, arg)
-
-		// If there's no right paren, we expect another arg (no comma needed)
-		if p.matchTokenKind(TokenKindRParen) {
-			break
-		}
+	args, err := p.parseDictionaryArgExprs()
+	if err != nil {
+		return nil, err
 	}
 
 	if err := p.expectTokenKind(TokenKindRParen); err != nil {
@@ -2279,10 +2331,52 @@ func (p *Parser) parseDictionarySourceClause(pos Pos) (*DictionarySourceClause, 
 	}, nil
 }
 
+// parseDictionaryArgExprs parses the arguments of a dictionary clause, which
+// are separated by spaces instead of commas. It stops at the closing
+// parenthesis and leaves it for the caller to consume.
+func (p *Parser) parseDictionaryArgExprs() ([]*DictionaryArgExpr, error) {
+	var args []*DictionaryArgExpr
+	for !p.matchTokenKind(TokenKindRParen) {
+		arg, err := p.parseDictionaryArgExpr(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, arg)
+	}
+	return args, nil
+}
+
 func (p *Parser) parseDictionaryArgExpr(pos Pos) (*DictionaryArgExpr, error) {
-	name, err := p.parseIdent()
+	// Argument names come from the source configuration, so they may be any
+	// keyword, as in SOURCE(HTTP(URL 'http://host/f.csv' FORMAT 'CSV')).
+	name, err := p.parseAnyKeyword()
 	if err != nil {
 		return nil, err
+	}
+
+	// An argument may hold its own list of arguments, as in
+	// HEADERS(HEADER(NAME 'API-KEY' VALUE 'key')).
+	if p.matchTokenKind(TokenKindLParen) {
+		lParenPos := p.Pos()
+		_ = p.lexer.consumeToken()
+
+		args, err := p.parseDictionaryArgExprs()
+		if err != nil {
+			return nil, err
+		}
+
+		rParenPos := p.Pos()
+		if err := p.expectTokenKind(TokenKindRParen); err != nil {
+			return nil, err
+		}
+
+		return &DictionaryArgExpr{
+			ArgPos:    pos,
+			Name:      name,
+			Args:      args,
+			LParenPos: lParenPos,
+			RParenPos: rParenPos,
+		}, nil
 	}
 
 	var value Expr
@@ -2318,7 +2412,7 @@ func (p *Parser) parseDictionaryArgExpr(pos Pos) (*DictionaryArgExpr, error) {
 			value = ident
 		}
 	default:
-		return nil, fmt.Errorf("expected identifier, string or number in dictionary argument, got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected identifier, string or number in dictionary argument, got %s", p.currentTokenKind())
 	}
 
 	return &DictionaryArgExpr{
@@ -2410,19 +2504,9 @@ func (p *Parser) parseDictionaryLayoutClause(pos Pos) (*DictionaryLayoutClause, 
 		return nil, err
 	}
 
-	var args []*DictionaryArgExpr
-	// Parse optional arguments
-	for !p.matchTokenKind(TokenKindRParen) {
-		arg, err := p.parseDictionaryArgExpr(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		args = append(args, arg)
-
-		// If there's no right paren, we expect another arg (no comma needed)
-		if p.matchTokenKind(TokenKindRParen) {
-			break
-		}
+	args, err := p.parseDictionaryArgExprs()
+	if err != nil {
+		return nil, err
 	}
 
 	if err := p.expectTokenKind(TokenKindRParen); err != nil {

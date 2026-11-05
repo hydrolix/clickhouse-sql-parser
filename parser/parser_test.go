@@ -185,9 +185,64 @@ func TestParser_InvalidSyntax(t *testing.T) {
 		"SELECT n FROM t ORDER BY n WITH FILL INTERPOLATE (x",         // Missing closing paren
 		"SELECT n FROM t ORDER BY n WITH FILL INTERPOLATE x AS x + 1", // Missing parens around column list
 		"ALTER TABLE foo_mv MODIFY QUERY AS SELECT * FROM baz",        // MODIFY QUERY followed by an invalid query
+		// A sorting key is a single expression, so a key over several columns
+		// is written as a tuple. A comma starts the next engine clause in
+		// CREATE TABLE and the next clause in ALTER TABLE.
+		"CREATE TABLE t (a DateTime, b String) ENGINE = MergeTree ORDER BY a, b",
+		"ALTER TABLE t MODIFY ORDER BY a, b",
+		// A broken column value must report an error, not stop the parser
+		"CREATE TABLE t (x String DEFAULT CAST(a +, 'String'))",
+		"CREATE TABLE t (x String MATERIALIZED a +)",
+		"CREATE TABLE t (x String ALIAS a +)",
 		// Invalid ARRAY JOIN types (only ARRAY JOIN, LEFT ARRAY JOIN, and INNER ARRAY JOIN are valid)
 		"SELECT * FROM t RIGHT ARRAY JOIN arr AS a", // RIGHT ARRAY JOIN not supported
 		"SELECT * FROM t FULL ARRAY JOIN arr AS a",  // FULL ARRAY JOIN not supported
+		// ARRAY JOIN reads a column list, so it has no locality — in any spelling,
+		// since modifiers keep their source case
+		"SELECT * FROM t GLOBAL ARRAY JOIN arr AS a",
+		"SELECT * FROM t LOCAL LEFT ARRAY JOIN arr AS a",
+		"SELECT * FROM t GLOBAL array JOIN arr AS a",
+		"SELECT * FROM t LOCAL left array JOIN arr AS a",
+		// A join takes at most one locality, and it precedes the join type
+		"SELECT * FROM t1 GLOBAL LOCAL JOIN t2 ON t1.a = t2.a",
+		"SELECT * FROM t1 LEFT GLOBAL JOIN t2 ON t1.a = t2.a",
+		// A locality without a join is not an alias, so it can't be dropped
+		"SELECT * FROM t1 GLOBAL",
+		"SELECT * FROM t1 LOCAL",
+		"SELECT * FROM t global",
+		"SELECT * FROM t1 GLOBAL JOIN t2 ON t1.a = t2.a GLOBAL",
+		"SELECT * FROM t1 GLOBAL WHERE a = 1",
+		"SELECT * FROM t1 LOCAL SETTINGS max_threads = 1",
+		// GLOBAL is a keyword everywhere, never an implicit alias
+		"SELECT a GLOBAL FROM t",
+		"SELECT a GLOBAL, b FROM t",
+		// GLOBAL is an operator only before IN/NOT IN, and LOCAL is never one
+		"SELECT * FROM t WHERE a GLOBAL LIKE 'x'",
+		"SELECT * FROM t WHERE a GLOBAL NOT LIKE 'x'",
+		"SELECT * FROM t WHERE a GLOBAL BETWEEN 1 AND 2",
+		"SELECT * FROM t WHERE a NOT GLOBAL IN (SELECT 1)",
+		"SELECT * FROM t WHERE a GLOBAL GLOBAL IN (SELECT 1)",
+		"SELECT * FROM t WHERE a LOCAL IN (SELECT 1)",
+		"SELECT * FROM t WHERE a LOCAL NOT IN (SELECT 1)",
+		"CREATE--", // trailing comment pushes p.Pos() past end of input (wrapError out-of-range)
+		// Inputs that previously caused a nil-pointer dereference while
+		// formatting the error message at EOF (p.current() is nil).
+		"ALTER ",
+		"SELECT*FROM A(0A",
+		"SET A=",
+		// An operator as the last token of the input is missing its right
+		// operand. The infix loop used to stop before it, so the operator
+		// either reached the statement parser as unexpected trailing input or,
+		// when it was a keyword, was read as an implicit alias.
+		"SELECT a +",
+		"SELECT a GLOBAL",
+		"SELECT a REGEXP",
+		"SELECT * FROM t WHERE a AND",
+		// A parenthesized select must still be closed
+		"(SELECT 1",
+		// ClickHouse rejects a set operator once SETTINGS is bound to a
+		// parenthesized group
+		"(SELECT 1) SETTINGS max_threads=1 UNION ALL SELECT 2",
 	}
 	for _, sql := range invalidSQLs {
 		parser := NewParser(sql)
@@ -724,7 +779,7 @@ func TestMatchVariable_QuotingMatrix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			p := NewParser(tc.sql)
-			// Prime the lexer so p.last() points at the first token.
+			// Prime the lexer so p.current() points at the first token.
 			require.NoError(t, p.lexer.consumeToken())
 			require.Equal(t, tc.want, p.matchVariable(), "matchVariable() mismatch for %q", tc.sql)
 		})
