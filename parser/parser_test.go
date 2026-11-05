@@ -752,6 +752,84 @@ func TestParser_With_ExceptAfterQualifiedStar(t *testing.T) {
 	require.Nil(t, sel.Except)
 }
 
+// `interval` is a keyword but must still work as an identifier (alias, column)
+// wherever it does not start an INTERVAL <expr> <unit> literal.
+func TestParser_With_IntervalIdentifier(t *testing.T) {
+	requireIntervalIdent := func(t *testing.T, expr Expr) {
+		t.Helper()
+		if wrapped, isWrapped := expr.(*ColumnExpr); isWrapped {
+			expr = wrapped.Expr
+		}
+		ident, ok := expr.(*Ident)
+		require.True(t, ok, "expected *Ident, got %T", expr)
+		require.Equal(t, "interval", ident.Name)
+	}
+
+	tests := []struct {
+		name  string
+		sql   string
+		check func(t *testing.T, q *SelectQuery)
+	}{
+		{
+			name: "interval alias in GROUP BY and ORDER BY",
+			sql:  "SELECT toStartOfInterval(ts, INTERVAL 1 MINUTE) AS interval, count() FROM t GROUP BY interval ORDER BY interval",
+			check: func(t *testing.T, q *SelectQuery) {
+				groupBy, ok := q.GroupBy.Expr.(*ColumnExprList)
+				require.True(t, ok, "expected *ColumnExprList, got %T", q.GroupBy.Expr)
+				require.Len(t, groupBy.Items, 1)
+				requireIntervalIdent(t, groupBy.Items[0])
+				require.Len(t, q.OrderBy.Items, 1)
+				order, ok := q.OrderBy.Items[0].(*OrderExpr)
+				require.True(t, ok, "expected *OrderExpr, got %T", q.OrderBy.Items[0])
+				requireIntervalIdent(t, order.Expr)
+			},
+		},
+		{
+			name: "interval in WHERE and ORDER BY DESC",
+			sql:  "SELECT interval FROM t WHERE interval > 0 ORDER BY interval DESC",
+			check: func(t *testing.T, q *SelectQuery) {
+				requireIntervalIdent(t, q.SelectItems[0].Expr)
+			},
+		},
+		{
+			name: "interval in select list and parentheses",
+			sql:  "SELECT (interval), interval + 1 FROM t",
+		},
+		{
+			name: "Interval literals unchanged",
+			sql:  "SELECT now() - INTERVAL 1 HOUR, INTERVAL (1) MINUTE, INTERVAL x DAY FROM t",
+			check: func(t *testing.T, q *SelectQuery) {
+				require.Len(t, q.SelectItems, 3)
+				binary, ok := q.SelectItems[0].Expr.(*BinaryOperation)
+				require.True(t, ok, "expected *BinaryOperation, got %T", q.SelectItems[0].Expr)
+				require.IsType(t, &IntervalExpr{}, binary.RightExpr)
+				require.IsType(t, &IntervalExpr{}, q.SelectItems[1].Expr)
+				require.IsType(t, &IntervalExpr{}, q.SelectItems[2].Expr)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := parseSelectForTest(t, tt.sql)
+			if tt.check != nil {
+				tt.check(t, q)
+			}
+		})
+	}
+
+	t.Run("Malformed literal still errors", func(t *testing.T) {
+		_, err := NewParser("SELECT INTERVAL 1 FOO").ParseStmts()
+		require.Error(t, err)
+	})
+
+	t.Run("Round trip keeps the alias", func(t *testing.T) {
+		sql := "SELECT 1 AS interval FROM t GROUP BY interval ORDER BY interval"
+		got := Format(parseSelectForTest(t, sql))
+		require.Equal(t, sql, got)
+		require.Equal(t, got, Format(parseSelectForTest(t, got)))
+	})
+}
+
 // Fork feature: $variable as a value in SETTINGS clause
 // (origin/main added a `case p.matchVariable()` branch in parseSettingsExprList).
 func TestParser_With_VariableInSettings(t *testing.T) {
