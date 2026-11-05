@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Fix**: an argument of `extract(...)` may carry `AS alias` (`extract(arrayJoin(x) AS part, '(\d+)')`), as in ClickHouse
+
 ## 0.2.0
 
 - Support the single-quote escaping rule
