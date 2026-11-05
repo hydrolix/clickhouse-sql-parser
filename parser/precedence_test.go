@@ -348,7 +348,7 @@ func TestGlobalJoinLocalityPrefixesTheJoinType(t *testing.T) {
 		{"SELECT * FROM t1 GLOBAL CROSS JOIN t2", []string{"GLOBAL", "CROSS", "JOIN"}},
 		{"SELECT * FROM t1 AS x LOCAL FULL JOIN t2 USING a", []string{"LOCAL", "FULL", "JOIN"}},
 	} {
-		from := parseOneStmt(t, tc.sql).(*SelectQuery).From.Expr
+		from := asType[*SelectQuery](t, parseOneStmt(t, tc.sql)).From.Expr
 		join, ok := from.(*JoinExpr)
 		require.True(t, ok, "%s: expected a *JoinExpr in FROM, got %T", tc.sql, from)
 
@@ -375,7 +375,7 @@ func TestGlobalAfterJoinConstraintStartsANewJoin(t *testing.T) {
 	// a GLOBAL after an ON/USING clause starts the next join, not a GLOBAL IN
 	sql := "SELECT * FROM t1 GLOBAL JOIN t2 ON t1.a = t2.a GLOBAL LEFT JOIN t3 ON t1.a = t3.a"
 	stmt := parseOneStmt(t, sql)
-	join := stmt.(*SelectQuery).From.Expr.(*JoinExpr)
+	join := asType[*JoinExpr](t, asType[*SelectQuery](t, stmt).From.Expr)
 
 	first, ok := join.Right.(*JoinExpr)
 	require.True(t, ok)

@@ -1016,7 +1016,7 @@ func (p *Parser) parseKeywordArgFunctionParams(pos Pos, form keywordArgForm) (*P
 	slot := 0
 	usedSeparator, usedComma := false, false
 	for !p.lexer.isEOF() && !p.matchTokenKind(TokenKindRParen) {
-		item, consumed, err := p.parseKeywordArgItem(form, slot, !(form.ClosedKeywordForm && usedComma))
+		item, consumed, err := p.parseKeywordArgItem(form, slot, !form.ClosedKeywordForm || !usedComma)
 		if err != nil {
 			return nil, err
 		}

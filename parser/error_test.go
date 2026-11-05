@@ -1,7 +1,6 @@
 package parser
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -15,7 +14,7 @@ func TestParseError_Structured(t *testing.T) {
 	require.Error(t, err)
 
 	var pe *ParseError
-	require.True(t, errors.As(err, &pe), "expected a *ParseError, got %T", err)
+	require.ErrorAs(t, err, &pe, "expected a *ParseError, got %T", err)
 	require.Equal(t, 2, pe.Line)
 	require.GreaterOrEqual(t, pe.Column, 1)
 	require.Contains(t, pe.Error(), "line 2:")
@@ -31,7 +30,7 @@ func TestParseError_ExpectedKeyword(t *testing.T) {
 	require.Error(t, err)
 
 	var pe *ParseError
-	require.True(t, errors.As(err, &pe))
+	require.ErrorAs(t, err, &pe)
 	require.Equal(t, "EXISTS", pe.Keyword)
 	require.Equal(t, 1, pe.Line)
 }
@@ -43,7 +42,7 @@ func TestParseError_ExpectedTokenKind(t *testing.T) {
 	require.Error(t, err)
 
 	var pe *ParseError
-	require.True(t, errors.As(err, &pe))
+	require.ErrorAs(t, err, &pe)
 	require.Equal(t, []TokenKind{TokenKindRParen}, pe.Expected)
 	require.True(t, strings.HasPrefix(pe.Error(), "line "))
 }

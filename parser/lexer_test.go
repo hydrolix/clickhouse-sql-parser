@@ -194,7 +194,7 @@ func TestConsumeTextBlock(t *testing.T) {
 		err := lexer.consumeToken()
 		require.NoError(t, err)
 		require.Equal(t, TokenKindString, lexer.currentToken.Kind)
-		require.Equal(t, "", lexer.currentToken.String)
+		require.Empty(t, lexer.currentToken.String)
 		require.True(t, lexer.isEOF())
 	})
 
@@ -359,8 +359,8 @@ func TestConsumeNumber(t *testing.T) {
 			lexer := NewLexer(n)
 			err := lexer.consumeToken()
 			require.NoError(t, err)
-			require.NotEqual(t, lexer.currentToken.Kind, TokenKindInt)
-			require.NotEqual(t, lexer.currentToken.Kind, TokenKindFloat)
+			require.NotEqual(t, TokenKindInt, lexer.currentToken.Kind)
+			require.NotEqual(t, TokenKindFloat, lexer.currentToken.Kind)
 		}
 	})
 
@@ -384,8 +384,8 @@ func TestConsumeNumber(t *testing.T) {
 			lexer := NewLexer(f)
 			err := lexer.consumeToken()
 			require.NoError(t, err)
-			require.NotEqual(t, lexer.currentToken.Kind, TokenKindInt)
-			require.NotEqual(t, lexer.currentToken.Kind, TokenKindFloat)
+			require.NotEqual(t, TokenKindInt, lexer.currentToken.Kind)
+			require.NotEqual(t, TokenKindFloat, lexer.currentToken.Kind)
 		}
 	})
 
@@ -454,12 +454,12 @@ func TestSingleLineCommentAtEOF(t *testing.T) {
 // a readable error naming the whole rune instead of a garbage one-byte token
 // that splits the UTF-8 sequence.
 func TestNonASCIIByteIsAnError(t *testing.T) {
-	err := lexAll("SELECT 中文")
+	err := lexAll("SELECT 中文") //nolint:gosmopolitan // non-ASCII input is the point of the test
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "'中'")
+	require.Contains(t, err.Error(), "'中'") //nolint:gosmopolitan // non-ASCII input is the point of the test
 
 	// quoted identifiers and string literals may still carry non-ASCII text
-	_, err = NewParser("SELECT `中文`, '中文'").ParseStmts()
+	_, err = NewParser("SELECT `中文`, '中文'").ParseStmts() //nolint:gosmopolitan // non-ASCII input is the point of the test
 	require.NoError(t, err)
 }
 

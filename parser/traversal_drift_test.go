@@ -245,7 +245,7 @@ func TestInsertStmtEndWithoutValues(t *testing.T) {
 	stmts, err := NewParser(sql).ParseStmts()
 	require.NoError(t, err)
 	require.Len(t, stmts, 1)
-	insert := stmts[0].(*InsertStmt)
+	insert := asType[*InsertStmt](t, stmts[0])
 	require.Empty(t, insert.Values)
 	require.Nil(t, insert.SelectExpr)
 	require.Equal(t, Pos(len(sql)), insert.End())
