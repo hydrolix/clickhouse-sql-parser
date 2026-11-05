@@ -449,6 +449,103 @@ func TestParser_With_ExtractArgAlias(t *testing.T) {
 	}
 }
 
+// Fork feature: a WITH-prefixed subquery in expression position parses like a SELECT-prefixed one.
+func TestParser_With_WithPrefixedSubquery(t *testing.T) {
+	firstSelect := func(t *testing.T, sql string) *SelectQuery {
+		t.Helper()
+		stmts, err := NewParser(sql).ParseStmts()
+		require.NoError(t, err, "Failed to parse: %s", sql)
+		require.NotEmpty(t, stmts)
+		sel, ok := stmts[0].(*SelectQuery)
+		require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+		return sel
+	}
+
+	// Function arguments are wrapped in a *ColumnExpr; unwrap to the inner expression.
+	firstArg := func(t *testing.T, sel *SelectQuery) Expr {
+		t.Helper()
+		fn, ok := sel.SelectItems[0].Expr.(*FunctionExpr)
+		require.True(t, ok, "expected *FunctionExpr, got %T", sel.SelectItems[0].Expr)
+		require.Len(t, fn.Params.Items.Items, 1)
+		arg := fn.Params.Items.Items[0]
+		if ce, ok := arg.(*ColumnExpr); ok {
+			return ce.Expr
+		}
+		return arg
+	}
+
+	tests := []struct {
+		name  string
+		check func(t *testing.T)
+	}{
+		{
+			name: "Scalar subquery with a constant alias",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "SELECT (WITH 1000 AS latest SELECT max(x) FROM t WHERE y > latest) AS m")
+				item := sel.SelectItems[0]
+				sub, ok := item.Expr.(*SubQuery)
+				require.True(t, ok, "expected *SubQuery, got %T", item.Expr)
+				require.True(t, sub.HasParen)
+				require.NotNil(t, sub.Select.With)
+				require.Equal(t, "m", item.Alias.Name)
+			},
+		},
+		{
+			name: "Scalar subquery with a CTE",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "SELECT (WITH x AS (SELECT 1 AS a) SELECT a FROM x)")
+				require.IsType(t, &SubQuery{}, sel.SelectItems[0].Expr)
+			},
+		},
+		{
+			name: "WITH-prefixed subquery as IN operand",
+			check: func(t *testing.T) {
+				firstSelect(t, "SELECT 1 IN (WITH 1 AS a SELECT a)")
+			},
+		},
+		{
+			name: "WITH-prefixed subquery as a WITH item",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "WITH (WITH 1 AS a SELECT a) AS b SELECT b")
+				require.NotNil(t, sel.With)
+				require.Len(t, sel.With.CTEs, 1)
+			},
+		},
+		{
+			name: "WITH-prefixed subquery as a function argument",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "SELECT exists(WITH 1 AS a SELECT a)")
+				arg, ok := firstArg(t, sel).(*SelectQuery)
+				require.True(t, ok, "expected *SelectQuery")
+				require.NotNil(t, arg.With)
+			},
+		},
+		{
+			name: "SELECT-prefixed subqueries unchanged",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "SELECT (SELECT 1)")
+				sub, ok := sel.SelectItems[0].Expr.(*SubQuery)
+				require.True(t, ok, "expected *SubQuery, got %T", sel.SelectItems[0].Expr)
+				require.True(t, sub.HasParen)
+				firstSelect(t, "SELECT 1 IN (SELECT 1)")
+				sel = firstSelect(t, "SELECT exists(SELECT 1)")
+				require.IsType(t, &SelectQuery{}, firstArg(t, sel))
+			},
+		},
+		{
+			name: "Round trip is a fixed point",
+			check: func(t *testing.T) {
+				sel := firstSelect(t, "SELECT (WITH 1000 AS latest SELECT max(x) FROM t WHERE y > latest) AS m")
+				formatted := Format(sel)
+				require.Equal(t, formatted, Format(firstSelect(t, formatted)))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, tt.check)
+	}
+}
+
 // Fork feature: $variable as a value in SETTINGS clause
 // (origin/main added a `case p.matchVariable()` branch in parseSettingsExprList).
 func TestParser_With_VariableInSettings(t *testing.T) {

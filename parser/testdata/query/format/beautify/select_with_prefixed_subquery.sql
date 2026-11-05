@@ -1,0 +1,43 @@
+-- Origin SQL:
+SELECT (WITH 1000 AS latest SELECT max(x) FROM t WHERE y > latest) AS m;
+SELECT (WITH x AS (SELECT 1 AS a) SELECT a FROM x);
+SELECT 1 IN (WITH 1 AS a SELECT a);
+WITH (WITH 1 AS a SELECT a) AS b SELECT b;
+SELECT exists(WITH 1 AS a SELECT a);
+
+
+-- Beautify SQL:
+SELECT
+  (WITH
+    1000 AS latest
+  SELECT
+    max(x)
+  FROM
+    t
+  WHERE
+    y > latest) AS m;
+SELECT
+  (WITH
+    x AS (SELECT
+      1 AS a)
+  SELECT
+    a
+  FROM
+    x);
+SELECT
+  1 IN (WITH
+    1 AS a
+  SELECT
+    a);
+WITH
+  (WITH
+    1 AS a
+  SELECT
+    a) AS b
+SELECT
+  b;
+SELECT
+  exists(WITH
+    1 AS a
+  SELECT
+    a);

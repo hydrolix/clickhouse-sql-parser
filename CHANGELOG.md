@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Fix**: an argument of `extract(...)` may carry `AS alias` (`extract(arrayJoin(x) AS part, '(\d+)')`), as in ClickHouse
+- **Fix**: a subquery that starts with `WITH` parses in expression position (scalar subquery, `IN (…)`, function argument, `WITH … AS name` item), like one that starts with `SELECT`
 
 ## 0.2.0
 
