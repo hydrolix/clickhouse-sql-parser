@@ -471,6 +471,14 @@ func (p *Parser) parseIdentOrFunction(_ Pos) (Expr, error) {
 		case p.matchTokenKind(TokenKindIdent, TokenKindKeyword):
 			fields := []*Ident{ident}
 			for {
+				if p.matchTokenKind("*") {
+					star, err := p.parseColumnStar(p.Pos())
+					if err != nil {
+						return nil, err
+					}
+					fields = append(fields, star)
+					break
+				}
 				// After a dot the token can only be a member name, so even
 				// reserved keywords are accepted (e.g. `t.from`).
 				child, err := p.parseAnyKeyword()
