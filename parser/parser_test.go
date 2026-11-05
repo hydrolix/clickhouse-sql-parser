@@ -446,6 +446,91 @@ func TestParser_With_ExtractArgAlias(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.check(t, parseFirst(t, tt.sql))
 		})
+
+	}
+}
+
+func TestParser_With_QualifiedStarPath(t *testing.T) {
+	parseFirstSelect := func(t *testing.T, sql string) *SelectQuery {
+		t.Helper()
+		stmts, err := NewParser(sql).ParseStmts()
+		require.NoError(t, err)
+		require.NotEmpty(t, stmts)
+		sel, ok := stmts[0].(*SelectQuery)
+		require.True(t, ok)
+		return sel
+	}
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "Three-part qualified star",
+			run: func(t *testing.T) {
+				sel := parseFirstSelect(t, "SELECT db.t.* FROM db.t")
+				path, ok := sel.SelectItems[0].Expr.(*Path)
+				require.True(t, ok)
+				require.Len(t, path.Fields, 3)
+				require.Equal(t, "*", path.Fields[2].Name)
+			},
+		},
+		{
+			name: "Mixed with a two-part star",
+			run: func(t *testing.T) {
+				sel := parseFirstSelect(t, "SELECT db.t.*, t.*, 1 FROM db.t AS t")
+				_, ok := sel.SelectItems[0].Expr.(*Path)
+				require.True(t, ok)
+				nested, ok := sel.SelectItems[1].Expr.(*NestedIdentifier)
+				require.True(t, ok)
+				require.Equal(t, "*", nested.DotIdent.Name)
+			},
+		},
+		{
+			name: "Qualified star as a function argument",
+			run: func(t *testing.T) {
+				_, err := NewParser("SELECT count(db.t.*) FROM db.t").ParseStmts()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "Three-part identifier unchanged",
+			run: func(t *testing.T) {
+				sel := parseFirstSelect(t, "SELECT a.b.c FROM t")
+				path, ok := sel.SelectItems[0].Expr.(*Path)
+				require.True(t, ok)
+				require.Len(t, path.Fields, 3)
+				for _, f := range path.Fields {
+					require.NotEqual(t, "*", f.Name)
+				}
+			},
+		},
+		{
+			name: "A trailing member access is not absorbed into the chain",
+			run: func(t *testing.T) {
+				// The generic postfix ".x" operator wraps the path (same as the
+				// pre-existing "t.*.x"); the star stays the last Path field.
+				sel := parseFirstSelect(t, "SELECT db.t.*.x FROM t")
+				idx, ok := sel.SelectItems[0].Expr.(*IndexOperation)
+				require.True(t, ok)
+				path, ok := idx.Object.(*Path)
+				require.True(t, ok)
+				require.Len(t, path.Fields, 3)
+				require.Equal(t, "*", path.Fields[2].Name)
+			},
+		},
+		{
+			name: "Round trip keeps the qualified star",
+			run: func(t *testing.T) {
+				const sql = "SELECT db.t.* FROM db.t"
+				got := Format(parseFirstSelect(t, sql))
+				require.Equal(t, sql, got)
+				require.Equal(t, got, Format(parseFirstSelect(t, got)))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, tt.run)
 	}
 }
 
