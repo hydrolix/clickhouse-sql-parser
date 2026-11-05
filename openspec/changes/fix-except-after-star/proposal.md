@@ -24,7 +24,7 @@ parses as `EXCEPT(STRICT) AS ts`, and `SELECT 1 EXCEPT (SELECT 2)` parses as a m
 ## What Changes
 
 - **`EXCEPT` is a column modifier only after a star-like item.** When the select item is
-  `*` or `COLUMNS(...)`, `EXCEPT` starts a column modifier whatever the next token is. After
+  `*`, a qualified star (`t.*`, `db.t.*`) or `COLUMNS(...)`, `EXCEPT` starts a column modifier whatever the next token is. After
   any other item the modifier loop does not consume `EXCEPT`, so it reaches the existing
   set-operator path.
 - **Keyword-named columns are accepted.** `* EXCEPT timestamp`, `* EXCEPT date`,
@@ -60,6 +60,6 @@ parses as `EXCEPT(STRICT) AS ts`, and `SELECT 1 EXCEPT (SELECT 2)` parses as a m
 - **Consumers:** the Grafana plugin and chproxy need only a dependency bump. The
   `plain-sql/regressions.yaml` entries `HDX-12821/001..003` in the dashboards corpus turn
   green; `004..009` stay green.
-- **Out of scope:** qualified stars (`t.*`, `db.t.*`) do not parse today for an unrelated
-  reason and are tracked separately; `APPLY`/`REPLACE` after a non-star item stays
+- **Out of scope:** making the three-part `db.t.*` parse (separate change
+  `qualified-star-path`; the star check already covers it); `APPLY`/`REPLACE` after a non-star item stays
   accepted (upstream fixture `select_item_with_modifiers.sql` relies on it).

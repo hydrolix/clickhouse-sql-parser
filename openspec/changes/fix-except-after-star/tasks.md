@@ -8,7 +8,8 @@
 ## 2. Parser (D1, D2)
 
 - [x] 2.1 `parser/parser_column.go`: add `isStarLikeSelectExpr(expr Expr) bool`
-      (`*Ident` with `Name == "*"`, or `*FunctionExpr` whose `Name.Name` equals `COLUMNS`
+      (`*Ident` with `Name == "*"`, a `*NestedIdentifier` whose `DotIdent` is `*`, a `*Path`
+      whose last field is `*`, or `*FunctionExpr` whose `Name.Name` equals `COLUMNS`
       case-insensitively).
 - [x] 2.2 `parseSelectItem`: replace the `EXCEPT` guard with `starLike && p.matchKeyword(KeywordExcept)`.
       Leave the `APPLY` / `REPLACE` branch as is.

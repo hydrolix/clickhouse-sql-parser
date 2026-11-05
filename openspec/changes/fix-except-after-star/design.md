@@ -48,7 +48,8 @@ ClickHouse 26.8 (`clickhouse local`):
 - `APPLY` / `REPLACE` after a non-star item (ClickHouse rejects it; the upstream fixture
   `select_item_with_modifiers.sql` contains `SELECT c0 REPLACE(c0 AS c1)` and keeping it
   byte-identical avoids upstream drift).
-- Qualified stars (`t.*`, `db.t.*`); they do not parse today, independent of `EXCEPT`.
+- Making `db.t.*` parse; the three-part form is a separate change (`qualified-star-path`).
+  The star check already treats it as star-like for when that lands.
 - Validating that the column list after `EXCEPT` names real columns.
 
 ## Decisions
@@ -58,7 +59,7 @@ ClickHouse 26.8 (`clickhouse local`):
 Replace the token-kind guard with a star check on the parsed item:
 
 ```go
-starLike := isStarLikeSelectExpr(expr) // *Ident{Name:"*"} or *FunctionExpr{Name:"COLUMNS"}
+starLike := isStarLikeSelectExpr(expr) // `*`, `t.*` (NestedIdentifier), `db.t.*` (Path ending in `*`) or COLUMNS(...)
 for {
     if starLike && p.matchKeyword(KeywordExcept) {
         // parseExceptExpr

@@ -1225,12 +1225,17 @@ func (p *Parser) parseColumnsExpr(pos Pos) (*ColumnExpr, error) {
 	}, nil
 }
 
-// isStarLikeSelectExpr reports whether expr is `*` or `COLUMNS(...)`, the only
-// select items an EXCEPT column modifier can follow.
+// isStarLikeSelectExpr reports whether expr is `*`, a qualified star (`t.*`,
+// `db.t.*`) or `COLUMNS(...)`, the only select items an EXCEPT column modifier
+// can follow.
 func isStarLikeSelectExpr(expr Expr) bool {
 	switch e := expr.(type) {
 	case *Ident:
 		return e.Name == "*"
+	case *NestedIdentifier:
+		return e.DotIdent != nil && e.DotIdent.Name == "*"
+	case *Path:
+		return len(e.Fields) > 0 && e.Fields[len(e.Fields)-1].Name == "*"
 	case *FunctionExpr:
 		return e.Name != nil && strings.EqualFold(e.Name.Name, "COLUMNS")
 	}

@@ -4,8 +4,8 @@
 
 ### Requirement: EXCEPT after a star-like select item SHALL be a column modifier
 
-When the select item expression is `*` or `COLUMNS(...)`, the parser SHALL treat a following
-`EXCEPT` as a column modifier regardless of the kind of the token after it. The modifier SHALL
+The parser SHALL treat an `EXCEPT` that follows `*`, a qualified star (`t.*`, `db.t.*`)
+or `COLUMNS(...)` as a column modifier regardless of the kind of the token after it. The modifier SHALL
 be a `*FunctionExpr` whose `Name.Name` is `EXCEPT` and whose `Params` hold the column list.
 
 #### Scenario: Keyword-named column
@@ -21,6 +21,11 @@ be a `*FunctionExpr` whose `Name.Name` is `EXCEPT` and whose `Params` hold the c
 #### Scenario: COLUMNS then EXCEPT
 - **WHEN** `SELECT COLUMNS('^a') EXCEPT timestamp FROM t` is parsed
 - **THEN** `ParseStmts` returns no error AND the item has one `EXCEPT` modifier
+
+#### Scenario: Qualified star then EXCEPT
+- **WHEN** `SELECT t.* EXCEPT a FROM t` is parsed
+- **THEN** `ParseStmts` returns no error AND the item has one `EXCEPT` modifier AND the
+  query has no set operation
 
 #### Scenario: Chained EXCEPT modifiers
 - **WHEN** `SELECT * EXCEPT timestamp EXCEPT b FROM t` is parsed

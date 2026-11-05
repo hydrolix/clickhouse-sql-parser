@@ -654,6 +654,19 @@ func TestParser_With_ExceptAfterStar(t *testing.T) {
 	})
 }
 
+// A qualified star takes EXCEPT as a column modifier like a bare star does
+// (`db.t.*` is covered by the same check once the three-part form parses).
+func TestParser_With_ExceptAfterQualifiedStar(t *testing.T) {
+	stmts, err := NewParser("SELECT t.* EXCEPT a FROM t").ParseStmts()
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+	sel, ok := stmts[0].(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+	require.Len(t, sel.SelectItems[0].Modifiers, 1)
+	require.Equal(t, "EXCEPT", sel.SelectItems[0].Modifiers[0].Name.Name)
+	require.Nil(t, sel.Except)
+}
+
 // Fork feature: $variable as a value in SETTINGS clause
 // (origin/main added a `case p.matchVariable()` branch in parseSettingsExprList).
 func TestParser_With_VariableInSettings(t *testing.T) {
