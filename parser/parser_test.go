@@ -349,6 +349,106 @@ func TestParser_With_ExceptIdent(t *testing.T) {
 	}
 }
 
+// Fork feature: an argument of extract(...) may carry AS alias, as in ClickHouse.
+func TestParser_With_ExtractArgAlias(t *testing.T) {
+	parseFirst := func(t *testing.T, sql string) *SelectQuery {
+		t.Helper()
+		stmts, err := NewParser(sql).ParseStmts()
+		require.NoError(t, err)
+		require.NotEmpty(t, stmts)
+		q, ok := stmts[0].(*SelectQuery)
+		require.True(t, ok)
+		return q
+	}
+	extractOf := func(t *testing.T, q *SelectQuery, item int) *ExtractExpr {
+		t.Helper()
+		expr := q.SelectItems[item].Expr
+		for {
+			switch e := expr.(type) {
+			case *ExtractExpr:
+				return e
+			case *ColumnExpr:
+				expr = e.Expr
+			case *FunctionExpr:
+				require.NotEmpty(t, e.Params.Items.Items)
+				expr = e.Params.Items.Items[0]
+			default:
+				require.FailNow(t, "no ExtractExpr found", "reached %T", expr)
+			}
+		}
+	}
+
+	const nestedSQL = `SELECT avg(toUInt32OrNull(extract(arrayJoin(splitByString('//', s)) AS part, '(\d+)'))) AS v, part FROM t`
+
+	tests := []struct {
+		name  string
+		sql   string
+		check func(t *testing.T, q *SelectQuery)
+	}{
+		{
+			name: "Alias on a regex extract argument",
+			sql:  nestedSQL,
+			check: func(t *testing.T, q *SelectQuery) {
+				params := extractOf(t, q, 0).Parameters
+				require.Len(t, params, 2)
+				col, ok := params[0].(*ColumnExpr)
+				require.True(t, ok)
+				require.Equal(t, "part", col.Alias.Name)
+				_, ok = params[1].(*StringLiteral)
+				require.True(t, ok)
+			},
+		},
+		{
+			name: "Alias on the haystack argument",
+			sql:  `SELECT extract(s AS src, '\d+') AS n, src FROM t`,
+			check: func(t *testing.T, q *SelectQuery) {
+				col, ok := extractOf(t, q, 0).Parameters[0].(*ColumnExpr)
+				require.True(t, ok)
+				require.Equal(t, "src", col.Alias.Name)
+			},
+		},
+		{
+			name: "Alias inside EXTRACT unit FROM expr",
+			sql:  `SELECT EXTRACT(YEAR FROM d AS day), day FROM t`,
+			check: func(t *testing.T, q *SelectQuery) {
+				params := extractOf(t, q, 0).Parameters
+				require.Len(t, params, 1)
+				col, ok := params[0].(*ColumnExpr)
+				require.True(t, ok)
+				require.Equal(t, "day", col.Alias.Name)
+				_, ok = col.Expr.(*IntervalFrom)
+				require.True(t, ok)
+			},
+		},
+		{
+			name: "Unaliased parameters unchanged",
+			sql:  `SELECT extract(s, '\d+'), EXTRACT(MONTH FROM d) FROM t`,
+			check: func(t *testing.T, q *SelectQuery) {
+				for i := range q.SelectItems {
+					for _, param := range extractOf(t, q, i).Parameters {
+						_, isCol := param.(*ColumnExpr)
+						require.False(t, isCol)
+					}
+				}
+			},
+		},
+		{
+			name: "Round trip keeps the alias",
+			sql:  nestedSQL,
+			check: func(t *testing.T, q *SelectQuery) {
+				formatted := Format(q)
+				require.Contains(t, formatted, "AS part")
+				require.Equal(t, formatted, Format(parseFirst(t, formatted)))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.check(t, parseFirst(t, tt.sql))
+		})
+	}
+}
+
 // Fork feature: $variable as a value in SETTINGS clause
 // (origin/main added a `case p.matchVariable()` branch in parseSettingsExprList).
 func TestParser_With_VariableInSettings(t *testing.T) {

@@ -365,20 +365,22 @@ func (p *Parser) parseColumnExtractExpr(pos Pos) (*ExtractExpr, error) {
 			return nil, err
 		}
 
-		var param Expr
-		if ident, ok := expr.(*Ident); ok {
-			if intervalUnits.Contains(strings.ToUpper(ident.Name)) && p.matchKeyword(KeywordFrom) {
-				param, err = p.parseExtractFrom(ident)
-				if err != nil {
-					return nil, err
-				}
-				parameters = append(parameters, param)
-			} else {
-				parameters = append(parameters, expr)
+		param := expr
+		if ident, ok := expr.(*Ident); ok &&
+			intervalUnits.Contains(strings.ToUpper(ident.Name)) && p.matchKeyword(KeywordFrom) {
+			param, err = p.parseExtractFrom(ident)
+			if err != nil {
+				return nil, err
 			}
-		} else {
-			parameters = append(parameters, expr)
 		}
+		if p.tryConsumeKeywords(KeywordAs) {
+			alias, err := p.parseIdent()
+			if err != nil {
+				return nil, err
+			}
+			param = &ColumnExpr{Expr: param, Alias: alias}
+		}
+		parameters = append(parameters, param)
 
 		if p.tryConsumeTokenKind(TokenKindComma) == nil {
 			break
