@@ -546,6 +546,127 @@ func TestParser_With_WithPrefixedSubquery(t *testing.T) {
 	}
 }
 
+// EXCEPT directly after `*` or COLUMNS(...) is a column modifier whatever the next
+// token is; after any other select item it is a set operator (HDX-12821).
+func TestParser_With_ExceptAfterStar(t *testing.T) {
+	selectOf := func(t *testing.T, sql string) *SelectQuery {
+		t.Helper()
+		stmts, err := NewParser(sql).ParseStmts()
+		require.NoError(t, err, "Failed to parse: %s", sql)
+		require.Len(t, stmts, 1)
+		q, ok := stmts[0].(*SelectQuery)
+		require.True(t, ok, "not a SelectQuery: %s", sql)
+		return q
+	}
+	paramsOf := func(m *FunctionExpr) []string {
+		names := make([]string, 0)
+		for _, item := range m.Params.Items.Items {
+			names = append(names, Format(item))
+		}
+		return names
+	}
+
+	t.Run("Keyword-named column", func(t *testing.T) {
+		q := selectOf(t, "SELECT timestamp, * EXCEPT timestamp FROM t")
+		require.Len(t, q.SelectItems, 2)
+		require.Empty(t, q.SelectItems[0].Modifiers)
+		mods := q.SelectItems[1].Modifiers
+		require.Len(t, mods, 1)
+		require.Equal(t, "EXCEPT", mods[0].Name.Name)
+		require.Equal(t, []string{"timestamp"}, paramsOf(mods[0]))
+
+		for _, sql := range []string{"SELECT * EXCEPT date FROM t", "SELECT * EXCEPT key FROM t"} {
+			q := selectOf(t, sql)
+			require.Len(t, q.SelectItems[0].Modifiers, 1, sql)
+			require.Equal(t, "EXCEPT", q.SelectItems[0].Modifiers[0].Name.Name, sql)
+			require.Len(t, paramsOf(q.SelectItems[0].Modifiers[0]), 1, sql)
+		}
+	})
+
+	t.Run("STRICT bare and list", func(t *testing.T) {
+		tests := []struct {
+			sql  string
+			want []string
+		}{
+			{"SELECT * EXCEPT STRICT timestamp FROM t", []string{"timestamp"}},
+			{"SELECT * EXCEPT STRICT (timestamp, key) FROM t", []string{"timestamp", "key"}},
+		}
+		for _, tt := range tests {
+			sql := tt.sql
+			item := selectOf(t, sql).SelectItems[0]
+			require.Nil(t, item.Alias, sql)
+			require.Len(t, item.Modifiers, 1, sql)
+			m := item.Modifiers[0]
+			require.Equal(t, "EXCEPT STRICT", m.Name.Name, sql)
+			require.Equal(t, Pos(strings.Index(sql, "STRICT")+len("STRICT")), m.Name.NameEnd, sql)
+			require.Equal(t, tt.want, paramsOf(m), sql)
+		}
+	})
+
+	t.Run("COLUMNS then EXCEPT", func(t *testing.T) {
+		item := selectOf(t, "SELECT COLUMNS('^a') EXCEPT timestamp FROM t").SelectItems[0]
+		require.Len(t, item.Modifiers, 1)
+		require.Equal(t, "EXCEPT", item.Modifiers[0].Name.Name)
+	})
+
+	t.Run("Chained EXCEPT modifiers", func(t *testing.T) {
+		item := selectOf(t, "SELECT * EXCEPT timestamp EXCEPT b FROM t").SelectItems[0]
+		require.Len(t, item.Modifiers, 2)
+		require.Equal(t, "EXCEPT", item.Modifiers[0].Name.Name)
+		require.Equal(t, "EXCEPT", item.Modifiers[1].Name.Name)
+	})
+
+	t.Run("Set operator matrix still parses as set operation", func(t *testing.T) {
+		for _, sql := range []string{
+			"SELECT 1 EXCEPT SELECT 2",
+			"SELECT 1 EXCEPT ALL SELECT 2",
+			"SELECT 1 EXCEPT DISTINCT SELECT 2",
+		} {
+			q := selectOf(t, sql)
+			require.NotNil(t, q.Except, sql)
+			require.Empty(t, q.SelectItems[0].Modifiers, sql)
+		}
+	})
+
+	t.Run("Parenthesised subquery after a non-star item is a set operation", func(t *testing.T) {
+		q := selectOf(t, "SELECT 1 EXCEPT (SELECT 2)")
+		require.NotNil(t, q.Except)
+		require.Empty(t, q.SelectItems[0].Modifiers)
+	})
+
+	t.Run("Modifier then set operation after FROM", func(t *testing.T) {
+		q := selectOf(t, "SELECT * EXCEPT timestamp FROM t EXCEPT ALL SELECT 3")
+		require.Len(t, q.SelectItems[0].Modifiers, 1)
+		require.NotNil(t, q.Except)
+		require.Equal(t, ExceptModeAll, q.ExceptMode)
+	})
+
+	t.Run("Non-star item rejects EXCEPT ident", func(t *testing.T) {
+		_, err := NewParser("SELECT a EXCEPT b FROM t").ParseStmts()
+		require.Error(t, err)
+	})
+
+	t.Run("STRICT round-trips through Format", func(t *testing.T) {
+		want := "SELECT * EXCEPT STRICT(timestamp) FROM t"
+		got := Format(selectOf(t, "SELECT * EXCEPT STRICT timestamp FROM t"))
+		require.Equal(t, want, got)
+		require.Equal(t, want, Format(selectOf(t, got)))
+	})
+}
+
+// A qualified star takes EXCEPT as a column modifier like a bare star does
+// (`db.t.*` is covered by the same check once the three-part form parses).
+func TestParser_With_ExceptAfterQualifiedStar(t *testing.T) {
+	stmts, err := NewParser("SELECT t.* EXCEPT a FROM t").ParseStmts()
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+	sel, ok := stmts[0].(*SelectQuery)
+	require.True(t, ok, "expected *SelectQuery, got %T", stmts[0])
+	require.Len(t, sel.SelectItems[0].Modifiers, 1)
+	require.Equal(t, "EXCEPT", sel.SelectItems[0].Modifiers[0].Name.Name)
+	require.Nil(t, sel.Except)
+}
+
 // Fork feature: $variable as a value in SETTINGS clause
 // (origin/main added a `case p.matchVariable()` branch in parseSettingsExprList).
 func TestParser_With_VariableInSettings(t *testing.T) {

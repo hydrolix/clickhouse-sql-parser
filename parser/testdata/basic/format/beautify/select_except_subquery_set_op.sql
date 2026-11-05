@@ -1,0 +1,10 @@
+-- Origin SQL:
+SELECT 1 EXCEPT (SELECT 2)
+
+
+-- Beautify SQL:
+SELECT
+  1
+EXCEPT
+(SELECT
+  2);

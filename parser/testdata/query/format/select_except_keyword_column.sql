@@ -1,0 +1,16 @@
+-- Origin SQL:
+SELECT timestamp, * EXCEPT timestamp FROM t;
+SELECT * EXCEPT date FROM t;
+SELECT * EXCEPT key FROM t;
+SELECT COLUMNS('^a') EXCEPT timestamp FROM t;
+SELECT * EXCEPT timestamp EXCEPT b FROM t;
+SELECT * EXCEPT timestamp FROM t EXCEPT ALL SELECT 3;
+
+
+-- Format SQL:
+SELECT timestamp, * EXCEPT(timestamp) FROM t;
+SELECT * EXCEPT(date) FROM t;
+SELECT * EXCEPT(key) FROM t;
+SELECT COLUMNS('^a') EXCEPT(timestamp) FROM t;
+SELECT * EXCEPT(timestamp) EXCEPT(b) FROM t;
+SELECT * EXCEPT(timestamp) FROM t EXCEPT ALL SELECT 3;
