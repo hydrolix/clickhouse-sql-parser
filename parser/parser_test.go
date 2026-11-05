@@ -1493,3 +1493,90 @@ func TestParser_With_FloatSettings(t *testing.T) {
 		require.Equal(t, want, Format(parseSelectForTest(t, got)))
 	})
 }
+
+// Covers the settings-reserved-keyword-names spec: a SETTINGS item name may be
+// any identifier or keyword, reserved or not.
+func TestParser_With_ReservedKeywordSettingNames(t *testing.T) {
+	t.Run("limit", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS limit = 5")
+		require.Equal(t, []string{"limit"}, settingNames(q.Settings))
+		settingNumber(t, q.Settings.Items[0], "5")
+	})
+
+	t.Run("offset", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS offset = 10")
+		require.Equal(t, []string{"offset"}, settingNames(q.Settings))
+		settingNumber(t, q.Settings.Items[0], "10")
+	})
+
+	t.Run("final", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS final = 1")
+		require.Equal(t, []string{"final"}, settingNames(q.Settings))
+		settingNumber(t, q.Settings.Items[0], "1")
+	})
+
+	t.Run("mixed with plain names", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS max_threads = 4, limit = 5, offset = 10")
+		require.Equal(t, []string{"max_threads", "limit", "offset"}, settingNames(q.Settings))
+	})
+
+	t.Run("after FORMAT", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 FORMAT JSON SETTINGS limit = 5")
+		require.Nil(t, q.Settings)
+		require.Equal(t, []string{"limit"}, settingNames(q.FormatSettings))
+	})
+
+	t.Run("in SET", func(t *testing.T) {
+		stmts, err := NewParser("SET limit = 5").ParseStmts()
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		set, ok := stmts[0].(*SetStmt)
+		require.True(t, ok, "got %T", stmts[0])
+		require.Equal(t, []string{"limit"}, settingNames(set.Settings))
+		settingNumber(t, set.Settings.Items[0], "5")
+	})
+
+	t.Run("in DDL settings lists", func(t *testing.T) {
+		stmts, err := NewParser("ALTER TABLE t MODIFY SETTING limit = 5").ParseStmts()
+		require.NoError(t, err)
+		alter, ok := stmts[0].(*AlterTable)
+		require.True(t, ok, "got %T", stmts[0])
+		modify, ok := alter.AlterExprs[0].(*AlterTableModifySetting)
+		require.True(t, ok, "got %T", alter.AlterExprs[0])
+		require.Equal(t, "limit", modify.Settings[0].Name.Name)
+	})
+
+	t.Run("non-reserved keyword name", func(t *testing.T) {
+		require.False(t, reservedKeywords.Contains(KeywordDate))
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS date = 1")
+		require.Equal(t, []string{"date"}, settingNames(q.Settings))
+	})
+
+	t.Run("quoted reserved keyword name", func(t *testing.T) {
+		q := parseSelectForTest(t, "SELECT 1 SETTINGS `limit` = 5")
+		require.Equal(t, []string{"limit"}, settingNames(q.Settings))
+		require.Equal(t, BackTicks, q.Settings.Items[0].Name.QuoteType)
+	})
+
+	t.Run("name positions cover the token", func(t *testing.T) {
+		sql := "SELECT 1 SETTINGS limit = 5"
+		q := parseSelectForTest(t, sql)
+		name := q.Settings.Items[0].Name
+		require.Equal(t, Pos(strings.Index(sql, "limit")), name.Pos())
+		require.Equal(t, Pos(strings.Index(sql, "limit")+len("limit")), name.End())
+	})
+
+	t.Run("still invalid", func(t *testing.T) {
+		for _, sql := range []string{
+			"SELECT 1 SETTINGS = 5",
+			"SELECT 1 SETTINGS 5 = 5",
+			"SELECT 1 SETTINGS limit",
+			"SELECT 1 SETTINGS 'limit' = 5",
+		} {
+			t.Run(sql, func(t *testing.T) {
+				_, err := NewParser(sql).ParseStmts()
+				require.Error(t, err)
+			})
+		}
+	})
+}

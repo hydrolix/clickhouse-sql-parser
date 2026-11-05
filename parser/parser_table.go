@@ -1342,7 +1342,8 @@ func (p *Parser) parseSettingsList(pos Pos) ([]*SettingExpr, error) {
 }
 
 func (p *Parser) parseSettingsExpr(pos Pos) (*SettingExpr, error) {
-	ident, err := p.parseIdent()
+	// A setting name may be any identifier or keyword, reserved or not (`limit`, `offset`, `final`).
+	ident, err := p.parseAnyKeyword()
 	if err != nil {
 		return nil, err
 	}
