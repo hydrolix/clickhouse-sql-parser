@@ -15,7 +15,7 @@ const (
 	TokenKindInt          TokenKind = "<int>"
 	TokenKindFloat        TokenKind = "<float>"
 	TokenKindString       TokenKind = "<string>"
-	TokenKindDot                    = "."
+	TokenKindDot          TokenKind = "."
 	TokenKindSingleEQ     TokenKind = "="
 	TokenKindDoubleEQ     TokenKind = "=="
 	TokenKindNE           TokenKind = "!="
@@ -75,8 +75,8 @@ func (t *Token) ToString() string {
 }
 
 type lexerState struct {
-	current   int
-	lastToken *Token
+	offset       int    // byte offset into input of the next unread character
+	currentToken *Token // current lookahead token; nil at end of input
 }
 
 type Lexer struct {
@@ -98,19 +98,19 @@ func (l *Lexer) restoreState(state lexerState) {
 }
 
 func (l *Lexer) skipN(n int) {
-	l.current += n
+	l.offset += n
 }
 
 func (l *Lexer) slice(i, j int) string {
-	return l.input[l.current+i : l.current+j]
+	return l.input[l.offset+i : l.offset+j]
 }
 
 func (l *Lexer) peekN(n int) byte {
-	return l.input[l.current+n]
+	return l.input[l.offset+n]
 }
 
 func (l *Lexer) peekOk(n int) bool {
-	return l.current+n < len(l.input)
+	return l.offset+n < len(l.input)
 }
 
 func (l *Lexer) isKeyword(ident string) bool {
@@ -124,29 +124,40 @@ func (l *Lexer) consumeNumber() error {
 		// skip sign
 		i++
 	}
-	if l.peekN(0) == '0' && l.peekOk(1) && l.peekN(1) == 'x' {
+	if l.peekOk(i+1) && l.peekN(i) == '0' && l.peekN(i+1) == 'x' {
 		i += 2
 		base = 16
 	}
 
 	hasExp := false
+	hasDot := false
 	tokenKind := TokenKindInt
+	// hasNumberPart is only set when a digit is actually consumed, so that a
+	// bare prefix followed by a non-digit ("0x;") is rejected rather than
+	// lexed as an empty hex literal
 	hasNumberPart := false
 	for l.peekOk(i) {
-		hasNumberPart = true
 		c := l.peekN(i)
 		switch {
 		case base == 10 && IsDigit(c):
+			hasNumberPart = true
 			i++
 			continue
 		case base == 16 && IsHexDigit(c):
+			hasNumberPart = true
 			i++
 			continue
 		case c == '.': // float
+			// a second dot ("1.2.3"), a dot after the exponent ("1e2.3") or
+			// a dot in a hex literal ("0x1.8") cannot start a valid number tail
+			if hasDot || hasExp || base == 16 {
+				return errors.New("invalid number")
+			}
+			hasDot = true
 			tokenKind = TokenKindFloat
 			i++
 			continue
-		case base != 16 && (c == 'e' || c == 'E' || c == 'p' || c == 'P'):
+		case base != 16 && (c == 'e' || c == 'E'):
 			if hasExp {
 				return errors.New("invalid number")
 			}
@@ -158,6 +169,8 @@ func (l *Lexer) consumeNumber() error {
 				return errors.New("exponent part should contain at least one digit")
 			}
 			hasExp = true
+			// scientific notation always denotes a floating-point value
+			tokenKind = TokenKindFloat
 			continue
 		}
 		break
@@ -165,11 +178,11 @@ func (l *Lexer) consumeNumber() error {
 	if (l.peekOk(i) && IsIdentPart(l.peekN(i))) || !hasNumberPart {
 		return errors.New("invalid number")
 	}
-	l.lastToken = &Token{
+	l.currentToken = &Token{
 		Kind:   tokenKind,
 		String: l.slice(0, i),
-		Pos:    Pos(l.current),
-		End:    Pos(l.current + i),
+		Pos:    Pos(l.offset),
+		End:    Pos(l.offset + i),
 		Base:   base,
 	}
 	l.skipN(i)
@@ -224,11 +237,11 @@ func (l *Lexer) consumeIdent(_ Pos) error {
 	} else {
 		token.Kind = TokenKindIdent
 	}
-	token.Pos = Pos(l.current)
-	token.End = Pos(l.current + i)
+	token.Pos = Pos(l.offset)
+	token.End = Pos(l.offset + i)
 	token.String = slice
 	token.QuoteType = quoteType
-	l.lastToken = token
+	l.currentToken = token
 
 	l.skipN(i)
 	if quoteType != Unquoted {
@@ -243,20 +256,25 @@ func (l *Lexer) consumeSingleLineComment() {
 	for l.peekOk(i) && l.peekN(i) != '\r' && l.peekN(i) != '\n' {
 		i++
 	}
-	l.skipN(i + 1)
+	if l.peekOk(i) {
+		// consume the newline too; at EOF there is none to consume
+		i++
+	}
+	l.skipN(i)
 }
 
-func (l *Lexer) consumeMultiLineComment() {
+func (l *Lexer) consumeMultiLineComment() error {
 	l.skipN(2)
 	i := 0
-	for !l.isEOF() {
+	for l.peekOk(i) {
 		if l.peekOk(i+1) && l.peekN(i) == '*' && l.peekN(i+1) == '/' {
-			i += 2
-			break
+			l.skipN(i + 2)
+			return nil
 		}
 		i++
 	}
 	l.skipN(i)
+	return errors.New("unclosed multi-line comment")
 }
 
 func (l *Lexer) consumeString() error {
@@ -306,22 +324,21 @@ func (l *Lexer) consumeString() error {
 			return errors.New("invalid string")
 		}
 	}
-
-	l.lastToken = &Token{
+	l.currentToken = &Token{
 		Kind:   TokenKindString,
 		String: l.slice(start, i),
-		Pos:    Pos(l.current + start),
-		End:    Pos(l.current + i),
+		Pos:    Pos(l.offset + start),
+		End:    Pos(l.offset + i),
 	}
 	l.skipN(i + start)
 	return nil
 }
 
-func (l *Lexer) skipComments() {
+func (l *Lexer) skipComments() error {
 	for !l.isEOF() {
 		l.skipSpace()
 		if !l.peekOk(0) {
-			return
+			return nil
 		}
 		switch l.peekN(0) {
 		case '-':
@@ -329,23 +346,26 @@ func (l *Lexer) skipComments() {
 				l.consumeSingleLineComment()
 				continue
 			}
-			return
+			return nil
 		case '#':
 			l.consumeSingleLineComment()
 			continue
 		case '/': // multi-line comment
 			if l.peekOk(1) && l.peekN(1) == '*' {
-				l.consumeMultiLineComment()
+				if err := l.consumeMultiLineComment(); err != nil {
+					return err
+				}
 				continue
 			}
-			return
+			return nil
 		case '\r', '\n':
 			// skip \r\n or \n\r
 			l.skipN(1)
 		default:
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 func (l *Lexer) peekToken() (*Token, error) {
@@ -353,7 +373,7 @@ func (l *Lexer) peekToken() (*Token, error) {
 	if err := l.consumeToken(); err != nil {
 		return nil, err
 	}
-	token := l.lastToken
+	token := l.currentToken
 
 	l.restoreState(savedState)
 	return token, nil
@@ -372,10 +392,12 @@ func (l *Lexer) hasPrecedenceToken(last *Token) bool {
 }
 
 func (l *Lexer) consumeToken() error {
-	// clear last token
-	lastToken := l.lastToken
-	l.lastToken = nil
-	l.skipComments()
+	// replace the current token; keep the previous one to disambiguate unary +/-
+	prevToken := l.currentToken
+	l.currentToken = nil
+	if err := l.skipComments(); err != nil {
+		return err
+	}
 	l.skipSpace()
 	if l.isEOF() {
 		return nil
@@ -386,11 +408,11 @@ func (l *Lexer) consumeToken() error {
 			l.peekN(0) == '<' && l.peekOk(1) && l.peekN(1) == '>' || // <>
 			l.peekN(0) == '=' && l.peekOk(1) && l.peekN(1) == '=' || // ==
 			l.peekN(0) != '|' && l.peekOk(1) && l.peekN(1) == '=' { // |=
-			l.lastToken = &Token{
+			l.currentToken = &Token{
 				String: l.slice(0, 2),
 				Kind:   TokenKind(l.slice(0, 2)),
-				Pos:    Pos(l.current),
-				End:    Pos(l.current + 2),
+				Pos:    Pos(l.offset),
+				End:    Pos(l.offset + 2),
 			}
 			l.skipN(2)
 			return nil
@@ -398,80 +420,92 @@ func (l *Lexer) consumeToken() error {
 
 	case '+', '-':
 		// hasPrecedenceToken is used to distinguish between unary and binary operators
-		if !l.hasPrecedenceToken(lastToken) && l.peekOk(1) && IsDigit(l.peekN(1)) {
+		if !l.hasPrecedenceToken(prevToken) && l.peekOk(1) && IsDigit(l.peekN(1)) {
 			return l.consumeNumber()
 		} else if l.peekOk(1) && l.peekN(1) == '>' {
-			l.lastToken = &Token{
+			l.currentToken = &Token{
 				String: l.slice(0, 2),
 				Kind:   TokenKindArrow,
-				Pos:    Pos(l.current),
-				End:    Pos(l.current + 2),
+				Pos:    Pos(l.offset),
+				End:    Pos(l.offset + 2),
 			}
 			l.skipN(2)
 			return nil
 		}
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		// A digit-prefixed token that is not a valid number is read as an
+		// identifier instead of failing the lex (e.g. 123e, 0xg, 1hello).
 		savedState := l.saveState()
 		if err := l.consumeNumber(); err != nil {
 			l.restoreState(savedState)
-			return l.consumeIdent(Pos(l.current))
+			return l.consumeIdent(Pos(l.offset))
 		}
 		return nil
 	case '$':
+		// $$...$$ is a dollar-quoted string literal; a lone $ starts an
+		// identifier (Grafana template variables such as $__timeFilter).
 		if l.peekOk(1) && l.peekN(1) == '$' {
 			return l.consumeString()
 		}
-		return l.consumeIdent(Pos(l.current))
+		return l.consumeIdent(Pos(l.offset))
 	case '`', '"':
-		return l.consumeIdent(Pos(l.current))
+		return l.consumeIdent(Pos(l.offset))
 	case '\'':
 		return l.consumeString()
 	case ':':
 		if l.peekOk(1) && l.peekN(1) == ':' {
-			l.lastToken = &Token{
+			l.currentToken = &Token{
 				String: l.slice(0, 2),
 				Kind:   TokenKindDash,
-				Pos:    Pos(l.current),
-				End:    Pos(l.current + 2),
+				Pos:    Pos(l.offset),
+				End:    Pos(l.offset + 2),
 			}
 			l.skipN(2)
 			return nil
 		}
 	case '.':
-		l.lastToken = &Token{
+		l.currentToken = &Token{
 			String: l.slice(0, 1),
 			Kind:   TokenKindDot,
-			Pos:    Pos(l.current),
-			End:    Pos(l.current + 1),
+			Pos:    Pos(l.offset),
+			End:    Pos(l.offset + 1),
 		}
 		l.skipN(1)
 		return nil
 	}
 
 	if IsIdentStart(l.peekN(0)) {
-		return l.consumeIdent(Pos(l.current))
+		return l.consumeIdent(Pos(l.offset))
+	}
+
+	// Non-ASCII bytes can only appear inside quoted identifiers or string
+	// literals, which are handled above. Report the whole rune instead of
+	// emitting a one-byte token that splits the UTF-8 sequence.
+	if l.peekN(0) >= utf8.RuneSelf {
+		r, _ := utf8.DecodeRuneInString(l.input[l.offset:])
+		return fmt.Errorf("unexpected character %q", r)
 	}
 
 	token := &Token{}
-	token.Pos = Pos(l.current)
-	token.End = Pos(l.current + 1)
-	token.String = l.input[l.current : l.current+1]
+	token.Pos = Pos(l.offset)
+	token.End = Pos(l.offset + 1)
+	token.String = l.input[l.offset : l.offset+1]
 	token.Kind = TokenKind(token.String)
 	l.skipN(1)
-	l.lastToken = token
+	l.currentToken = token
 	return nil
 }
 
 func (l *Lexer) isEOF() bool {
-	return l.current >= len(l.input)
+	return l.offset >= len(l.input)
 }
 
 func (l *Lexer) skipSpace() {
 	for !l.isEOF() {
-		r, size := utf8.DecodeRuneInString(l.input[l.current:])
+		r, size := utf8.DecodeRuneInString(l.input[l.offset:])
 		if !unicode.IsSpace(r) {
 			break
 		}
-		l.current += size
+		l.offset += size
 	}
 }

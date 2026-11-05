@@ -122,7 +122,7 @@ func (p *BinaryOperation) isLogicalOp() bool {
 	case TokenKind(KeywordAnd), TokenKind(KeywordOr):
 		return true
 	default:
-		return p.HasGlobal || p.HasNot
+		return false
 	}
 }
 
@@ -143,15 +143,24 @@ func (p *BinaryOperation) writeLogicalOperand(formatter *Formatter, expr Expr) {
 	}
 }
 
+// writeOperatorPrefix emits the GLOBAL and NOT modifiers that precede the
+// operator, e.g. the GLOBAL of GLOBAL IN or both of GLOBAL NOT IN. They stack in
+// that fixed order, so this must not be an either/or.
+func (p *BinaryOperation) writeOperatorPrefix(formatter *Formatter) {
+	if p.HasGlobal {
+		formatter.WriteString("GLOBAL ")
+	}
+
+	if p.HasNot {
+		formatter.WriteString("NOT ")
+	}
+}
+
 func (p *BinaryOperation) FormatSQL(formatter *Formatter) {
 	if p.isLogicalOp() && formatter.mode == FormatModeBeautify {
 		p.writeLogicalOperand(formatter, p.LeftExpr)
 		formatter.NewLine()
-		if p.HasNot {
-			formatter.WriteString("NOT ")
-		} else if p.HasGlobal {
-			formatter.WriteString("GLOBAL ")
-		}
+		p.writeOperatorPrefix(formatter)
 		formatter.WriteString(string(p.Operation))
 		formatter.NewLine()
 		p.writeLogicalOperand(formatter, p.RightExpr)
@@ -161,11 +170,7 @@ func (p *BinaryOperation) FormatSQL(formatter *Formatter) {
 	if p.Operation != TokenKindDash {
 		formatter.WriteByte(whitespace)
 	}
-	if p.HasNot {
-		formatter.WriteString("NOT ")
-	} else if p.HasGlobal {
-		formatter.WriteString("GLOBAL ")
-	}
+	p.writeOperatorPrefix(formatter)
 	formatter.WriteString(string(p.Operation))
 	if p.Operation != TokenKindDash {
 		formatter.WriteByte(whitespace)
@@ -427,6 +432,11 @@ func (a *AlterTableModifyQuery) FormatSQL(formatter *Formatter) {
 	formatter.Dedent()
 }
 
+func (a *AlterTableModifyOrderBy) FormatSQL(formatter *Formatter) {
+	formatter.WriteString("MODIFY ORDER BY ")
+	formatter.WriteExpr(a.OrderBy)
+}
+
 func (a *AlterTableModifySetting) FormatSQL(formatter *Formatter) {
 	formatter.WriteString("MODIFY SETTING")
 	formatter.Indent()
@@ -558,11 +568,16 @@ func (a *AuthenticationClause) FormatSQL(formatter *Formatter) {
 }
 
 func (f *BetweenClause) FormatSQL(formatter *Formatter) {
+	keyword := "BETWEEN "
+	if f.Not {
+		keyword = "NOT BETWEEN "
+	}
 	if f.Expr != nil {
 		formatter.WriteExpr(f.Expr)
-		formatter.WriteString(" BETWEEN ")
+		formatter.WriteString(" ")
+		formatter.WriteString(keyword)
 	} else {
-		formatter.WriteString("BETWEEN ")
+		formatter.WriteString(keyword)
 	}
 	formatter.WriteExpr(f.Between)
 	formatter.WriteString(" AND ")
@@ -907,6 +922,10 @@ func (c *CreateMaterializedView) FormatSQL(formatter *Formatter) {
 		formatter.Break()
 		formatter.WriteString("APPEND")
 	}
+	if c.TableSchema != nil {
+		formatter.Break()
+		formatter.WriteExpr(c.TableSchema)
+	}
 	if c.Engine != nil {
 		formatter.Break()
 		formatter.WriteExpr(c.Engine)
@@ -1209,8 +1228,19 @@ func (d *DestinationClause) FormatSQL(formatter *Formatter) {
 
 func (d *DictionaryArgExpr) FormatSQL(formatter *Formatter) {
 	formatter.WriteExpr(d.Name)
-	formatter.WriteByte(whitespace)
-	formatter.WriteExpr(d.Value)
+	if !d.hasArgList() {
+		formatter.WriteByte(whitespace)
+		formatter.WriteExpr(d.Value)
+		return
+	}
+	formatter.WriteByte('(')
+	for i, arg := range d.Args {
+		if i > 0 {
+			formatter.WriteByte(whitespace)
+		}
+		formatter.WriteExpr(arg)
+	}
+	formatter.WriteByte(')')
 }
 
 func (d *DictionaryAttribute) FormatSQL(formatter *Formatter) {
@@ -1376,6 +1406,9 @@ func (d *DropDatabase) FormatSQL(formatter *Formatter) {
 	if d.OnCluster != nil {
 		formatter.WriteByte(whitespace)
 		formatter.WriteExpr(d.OnCluster)
+	}
+	if len(d.Modifier) != 0 {
+		formatter.WriteString(" " + d.Modifier)
 	}
 }
 
@@ -2515,6 +2548,10 @@ func (s *SystemFlushExpr) FormatSQL(formatter *Formatter) {
 func (s *SystemReloadExpr) FormatSQL(formatter *Formatter) {
 	formatter.WriteString("RELOAD ")
 	formatter.WriteString(s.Type)
+	if s.OnCluster != nil {
+		formatter.WriteByte(whitespace)
+		formatter.WriteExpr(s.OnCluster)
+	}
 	if s.Dictionary != nil {
 		formatter.WriteByte(whitespace)
 		formatter.WriteExpr(s.Dictionary)
@@ -2884,5 +2921,9 @@ func (w *WithClause) FormatSQL(formatter *Formatter) {
 
 func (w *WithTimeoutClause) FormatSQL(formatter *Formatter) {
 	formatter.WriteString("WITH TIMEOUT ")
-	formatter.WriteExpr(w.Number)
+	if w.Number != nil {
+		formatter.WriteExpr(w.Number)
+		return
+	}
+	formatter.WriteExpr(w.Expr)
 }

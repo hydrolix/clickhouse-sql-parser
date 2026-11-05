@@ -200,7 +200,9 @@ func (j *JoinTableExpr) Accept(visitor ASTVisitor) error {
 		return err
 	}
 	if j.SampleRatio != nil {
-		return j.SampleRatio.Accept(visitor)
+		if err := j.SampleRatio.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitJoinTableExpr(j)
 }
@@ -339,7 +341,7 @@ func (a *AlterTableDropPartition) Pos() Pos {
 
 func (a *AlterTableDropPartition) End() Pos {
 	if a.Settings != nil {
-		a.Settings.End()
+		return a.Settings.End()
 	}
 	return a.Partition.End()
 }
@@ -353,6 +355,11 @@ func (a *AlterTableDropPartition) Accept(visitor ASTVisitor) error {
 	defer visitor.Leave(a)
 	if err := a.Partition.Accept(visitor); err != nil {
 		return err
+	}
+	if a.Settings != nil {
+		if err := a.Settings.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitAlterTableDropPartition(a)
 }
@@ -549,6 +556,11 @@ func (p *ProjectionOrderByClause) End() Pos {
 func (p *ProjectionOrderByClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(p)
 	defer visitor.Leave(p)
+	if p.Columns != nil {
+		if err := p.Columns.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitProjectionOrderBy(p)
 }
 
@@ -924,6 +936,33 @@ func (a *AlterTableModifyQuery) Accept(visitor ASTVisitor) error {
 	return visitor.VisitAlterTableModifyQuery(a)
 }
 
+type AlterTableModifyOrderBy struct {
+	ModifyPos    Pos
+	StatementEnd Pos
+	OrderBy      Expr
+}
+
+func (a *AlterTableModifyOrderBy) Pos() Pos {
+	return a.ModifyPos
+}
+
+func (a *AlterTableModifyOrderBy) End() Pos {
+	return a.StatementEnd
+}
+
+func (a *AlterTableModifyOrderBy) AlterType() string {
+	return "MODIFY_ORDER_BY"
+}
+
+func (a *AlterTableModifyOrderBy) Accept(visitor ASTVisitor) error {
+	visitor.Enter(a)
+	defer visitor.Leave(a)
+	if err := a.OrderBy.Accept(visitor); err != nil {
+		return err
+	}
+	return visitor.VisitAlterTableModifyOrderBy(a)
+}
+
 type AlterTableModifyTTL struct {
 	ModifyPos    Pos
 	StatementEnd Pos
@@ -1260,6 +1299,11 @@ func (u *UUID) End() Pos {
 func (u *UUID) Accept(visitor ASTVisitor) error {
 	visitor.Enter(u)
 	defer visitor.Leave(u)
+	if u.Value != nil {
+		if err := u.Value.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitUUID(u)
 }
 
@@ -1288,6 +1332,11 @@ func (c *CreateDatabase) Type() string {
 func (c *CreateDatabase) Accept(visitor ASTVisitor) error {
 	visitor.Enter(c)
 	defer visitor.Leave(c)
+	if c.Name != nil {
+		if err := c.Name.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	if c.OnCluster != nil {
 		if err := c.OnCluster.Accept(visitor); err != nil {
 			return err
@@ -1295,6 +1344,11 @@ func (c *CreateDatabase) Accept(visitor ASTVisitor) error {
 	}
 	if c.Engine != nil {
 		if err := c.Engine.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if c.Comment != nil {
+		if err := c.Comment.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -1365,6 +1419,11 @@ func (c *CreateTable) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
+	if c.Comment != nil {
+		if err := c.Comment.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitCreateTable(c)
 }
 
@@ -1380,6 +1439,7 @@ type CreateMaterializedView struct {
 	Settings     *SettingsClause
 	HasAppend    bool
 	Engine       *EngineExpr
+	TableSchema  *TableSchemaClause // column list for ENGINE-based MVs (no TO clause)
 	HasEmpty     bool
 	Destination  *DestinationClause
 	SubQuery     *SubQuery
@@ -1434,19 +1494,20 @@ func (c *CreateMaterializedView) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
+	if c.TableSchema != nil {
+		if err := c.TableSchema.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	if c.Engine != nil {
 		if err := c.Engine.Accept(visitor); err != nil {
 			return err
 		}
 	}
 	if c.Destination != nil {
+		// Destination.Accept visits its own TableSchema
 		if err := c.Destination.Accept(visitor); err != nil {
 			return err
-		}
-		if c.Destination.TableSchema != nil {
-			if err := c.Destination.TableSchema.Accept(visitor); err != nil {
-				return err
-			}
 		}
 	}
 	if c.SubQuery != nil {
@@ -1987,6 +2048,9 @@ func (d *DestinationClause) Pos() Pos {
 }
 
 func (d *DestinationClause) End() Pos {
+	if d.TableSchema != nil {
+		return d.TableSchema.End()
+	}
 	return d.TableIdentifier.End()
 }
 
@@ -1995,6 +2059,11 @@ func (d *DestinationClause) Accept(visitor ASTVisitor) error {
 	defer visitor.Leave(d)
 	if err := d.TableIdentifier.Accept(visitor); err != nil {
 		return err
+	}
+	if d.TableSchema != nil {
+		if err := d.TableSchema.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitDestinationExpr(d)
 }
@@ -2457,6 +2526,11 @@ func (t *TTLPolicyRule) Accept(visitor ASTVisitor) error {
 	}
 	if t.ToDisk != nil {
 		if err := t.ToDisk.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if t.Action != nil {
+		if err := t.Action.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -3147,6 +3221,11 @@ func (c *ColumnDef) Accept(visitor ASTVisitor) error {
 			return err
 		}
 	}
+	if c.CompressionCodec != nil {
+		if err := c.CompressionCodec.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	return visitor.VisitColumnDef(c)
 }
 
@@ -3184,9 +3263,39 @@ type JSONPath struct {
 	Idents []*Ident
 }
 
+func (j *JSONPath) accept(visitor ASTVisitor) error {
+	if j == nil {
+		return nil
+	}
+	for _, ident := range j.Idents {
+		if ident == nil {
+			continue
+		}
+		if err := ident.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type JSONTypeHint struct {
 	Path *JSONPath
 	Type ColumnType
+}
+
+func (j *JSONTypeHint) accept(visitor ASTVisitor) error {
+	if j == nil {
+		return nil
+	}
+	if err := j.Path.accept(visitor); err != nil {
+		return err
+	}
+	if j.Type != nil {
+		if err := j.Type.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type JSONOption struct {
@@ -3196,6 +3305,34 @@ type JSONOption struct {
 	MaxDynamicTypes *NumberLiteral
 	// Type hint for specific JSON subcolumn path, e.g., "message String" or "a.b UInt64"
 	Column *JSONTypeHint
+}
+
+func (j *JSONOption) accept(visitor ASTVisitor) error {
+	if j == nil {
+		return nil
+	}
+	if err := j.SkipPath.accept(visitor); err != nil {
+		return err
+	}
+	if j.SkipRegex != nil {
+		if err := j.SkipRegex.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if j.MaxDynamicPaths != nil {
+		if err := j.MaxDynamicPaths.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if j.MaxDynamicTypes != nil {
+		if err := j.MaxDynamicTypes.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if err := j.Column.accept(visitor); err != nil {
+		return err
+	}
+	return nil
 }
 
 type JSONOptions struct {
@@ -3210,6 +3347,18 @@ func (j *JSONOptions) Pos() Pos {
 
 func (j *JSONOptions) End() Pos {
 	return j.RParen
+}
+
+func (j *JSONOptions) accept(visitor ASTVisitor) error {
+	if j == nil {
+		return nil
+	}
+	for _, item := range j.Items {
+		if err := item.accept(visitor); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type JSONType struct {
@@ -3236,6 +3385,9 @@ func (j *JSONType) Accept(visitor ASTVisitor) error {
 	visitor.Enter(j)
 	defer visitor.Leave(j)
 	if err := j.Name.Accept(visitor); err != nil {
+		return err
+	}
+	if err := j.Options.accept(visitor); err != nil {
 		return err
 	}
 	return visitor.VisitJSONType(j)
@@ -4119,6 +4271,7 @@ func (d *DictionarySchemaClause) Accept(visitor ASTVisitor) error {
 
 type DictionaryAttribute struct {
 	NamePos      Pos
+	AttrEnd      Pos // end of the last property, or of the type when there is none
 	Name         *Ident
 	Type         ColumnType
 	Default      Literal
@@ -4133,22 +4286,7 @@ func (d *DictionaryAttribute) Pos() Pos {
 }
 
 func (d *DictionaryAttribute) End() Pos {
-	if d.IsObjectId {
-		return d.NamePos + Pos(len("IS_OBJECT_ID"))
-	}
-	if d.Injective {
-		return d.NamePos + Pos(len("INJECTIVE"))
-	}
-	if d.Hierarchical {
-		return d.NamePos + Pos(len("HIERARCHICAL"))
-	}
-	if d.Expression != nil {
-		return d.Expression.End()
-	}
-	if d.Default != nil {
-		return d.Default.End()
-	}
-	return d.Type.End()
+	return d.AttrEnd
 }
 
 func (d *DictionaryAttribute) Accept(visitor ASTVisitor) error {
@@ -4300,7 +4438,13 @@ func (d *DictionarySourceClause) Accept(visitor ASTVisitor) error {
 type DictionaryArgExpr struct {
 	ArgPos Pos
 	Name   *Ident
-	Value  Expr // can be Ident with optional parentheses or literal
+	Value  Expr // can be Ident with optional parentheses or literal, nil for a nested argument list
+	// Args holds a nested argument list such as CREDENTIALS(USER 'u' PASSWORD 'p').
+	Args []*DictionaryArgExpr
+	// LParenPos tells a nested list apart from a value: it is only set when the
+	// argument is written with parentheses, which may hold no argument at all.
+	LParenPos Pos
+	RParenPos Pos
 }
 
 func (d *DictionaryArgExpr) Pos() Pos {
@@ -4308,7 +4452,14 @@ func (d *DictionaryArgExpr) Pos() Pos {
 }
 
 func (d *DictionaryArgExpr) End() Pos {
-	return d.Value.End()
+	if d.Value != nil {
+		return d.Value.End()
+	}
+	return d.RParenPos + 1
+}
+
+func (d *DictionaryArgExpr) hasArgList() bool {
+	return d.LParenPos != 0
 }
 
 func (d *DictionaryArgExpr) Accept(visitor ASTVisitor) error {
@@ -4317,8 +4468,15 @@ func (d *DictionaryArgExpr) Accept(visitor ASTVisitor) error {
 	if err := d.Name.Accept(visitor); err != nil {
 		return err
 	}
-	if err := d.Value.Accept(visitor); err != nil {
-		return err
+	if d.Value != nil {
+		if err := d.Value.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	for _, arg := range d.Args {
+		if err := arg.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitDictionaryArgExpr(d)
 }
@@ -4427,14 +4585,27 @@ func (w *WithTimeoutClause) Pos() Pos {
 }
 
 func (w *WithTimeoutClause) End() Pos {
-	return w.Number.End()
+	if w.Number != nil {
+		return w.Number.End()
+	}
+	if w.Expr != nil {
+		return w.Expr.End()
+	}
+	return w.WithTimeoutPos
 }
 
 func (w *WithTimeoutClause) Accept(visitor ASTVisitor) error {
 	visitor.Enter(w)
 	defer visitor.Leave(w)
-	if err := w.Number.Accept(visitor); err != nil {
-		return err
+	if w.Expr != nil {
+		if err := w.Expr.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if w.Number != nil {
+		if err := w.Number.Accept(visitor); err != nil {
+			return err
+		}
 	}
 	return visitor.VisitWithTimeoutExpr(w)
 }
@@ -4611,16 +4782,17 @@ func (f *FromClause) Accept(visitor ASTVisitor) error {
 }
 
 type IsNullExpr struct {
-	IsPos Pos
-	Expr  Expr
+	IsPos   Pos // position of the IS keyword
+	NullEnd Pos // end of the NULL keyword
+	Expr    Expr
 }
 
 func (n *IsNullExpr) Pos() Pos {
-	return n.IsPos
+	return n.Expr.Pos()
 }
 
 func (n *IsNullExpr) End() Pos {
-	return n.Expr.End()
+	return n.NullEnd
 }
 
 func (n *IsNullExpr) Accept(visitor ASTVisitor) error {
@@ -4633,8 +4805,9 @@ func (n *IsNullExpr) Accept(visitor ASTVisitor) error {
 }
 
 type IsNotNullExpr struct {
-	IsPos Pos
-	Expr  Expr
+	IsPos   Pos // position of the IS keyword
+	NullEnd Pos // end of the NULL keyword
+	Expr    Expr
 }
 
 func (n *IsNotNullExpr) Pos() Pos {
@@ -4642,7 +4815,7 @@ func (n *IsNotNullExpr) Pos() Pos {
 }
 
 func (n *IsNotNullExpr) End() Pos {
-	return n.Expr.End()
+	return n.NullEnd
 }
 
 func (n *IsNotNullExpr) Accept(visitor ASTVisitor) error {
@@ -4998,6 +5171,7 @@ func (f *WindowFrameExtendExpr) Accept(visitor ASTVisitor) error {
 
 type BetweenClause struct {
 	Expr    Expr
+	Not     bool
 	Between Expr
 	AndPos  Pos
 	And     Expr
@@ -5173,6 +5347,11 @@ func (s *SelectQuery) Accept(visitor ASTVisitor) error {
 	defer visitor.Leave(s)
 	if s.With != nil {
 		if err := s.With.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if s.DistinctOn != nil {
+		if err := s.DistinctOn.Accept(visitor); err != nil {
 			return err
 		}
 	}
@@ -5403,6 +5582,11 @@ func (i *IntervalFrom) End() Pos {
 func (i *IntervalFrom) Accept(visitor ASTVisitor) error {
 	visitor.Enter(i)
 	defer visitor.Leave(i)
+	if i.Interval != nil {
+		if err := i.Interval.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	if err := i.FromExpr.Accept(visitor); err != nil {
 		return err
 	}
@@ -5440,6 +5624,7 @@ type DropDatabase struct {
 	Name         *Ident
 	IfExists     bool
 	OnCluster    *ClusterClause
+	Modifier     string
 }
 
 func (d *DropDatabase) Pos() Pos {
@@ -5766,6 +5951,7 @@ func (s *SystemFlushExpr) Accept(visitor ASTVisitor) error {
 type SystemReloadExpr struct {
 	ReloadPos    Pos
 	StatementEnd Pos
+	OnCluster    *ClusterClause
 	Dictionary   *TableIdentifier
 	Type         string
 }
@@ -5781,6 +5967,11 @@ func (s *SystemReloadExpr) End() Pos {
 func (s *SystemReloadExpr) Accept(visitor ASTVisitor) error {
 	visitor.Enter(s)
 	defer visitor.Leave(s)
+	if s.OnCluster != nil {
+		if err := s.OnCluster.Accept(visitor); err != nil {
+			return err
+		}
+	}
 	if s.Dictionary != nil {
 		if err := s.Dictionary.Accept(visitor); err != nil {
 			return err
@@ -6026,22 +6217,33 @@ func (i *InsertStmt) End() Pos {
 	if i.SelectExpr != nil {
 		return i.SelectExpr.End()
 	}
-	return i.Values[len(i.Values)-1].End()
+	if len(i.Values) > 0 {
+		return i.Values[len(i.Values)-1].End()
+	}
+	// `INSERT INTO t FORMAT CSV` carries neither VALUES nor a SELECT — the
+	// data arrives out of band after the statement
+	if i.Format != nil {
+		return i.Format.End()
+	}
+	if i.ColumnNames != nil {
+		return i.ColumnNames.End()
+	}
+	return i.Table.End()
 }
 
 func (i *InsertStmt) Accept(visitor ASTVisitor) error {
 	visitor.Enter(i)
 	defer visitor.Leave(i)
-	if i.Format != nil {
-		if err := i.Format.Accept(visitor); err != nil {
-			return err
-		}
-	}
 	if err := i.Table.Accept(visitor); err != nil {
 		return err
 	}
 	if i.ColumnNames != nil {
 		if err := i.ColumnNames.Accept(visitor); err != nil {
+			return err
+		}
+	}
+	if i.Format != nil {
+		if err := i.Format.Accept(visitor); err != nil {
 			return err
 		}
 	}

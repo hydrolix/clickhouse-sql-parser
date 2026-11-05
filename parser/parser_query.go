@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"slices"
 )
@@ -168,79 +169,79 @@ func (p *Parser) tryParseJoinConstraints(pos Pos) (Expr, error) {
 	return nil, nil
 }
 
-func (p *Parser) parseJoinOp(_ Pos) []string {
+func (p *Parser) parseJoinType(_ Pos) []string {
 	var modifiers []string
 	switch {
 	case p.tryConsumeKeywords(KeywordCross): // cross join
 		modifiers = append(modifiers, KeywordCross)
 	case p.matchKeyword(KeywordAny), p.matchKeyword(KeywordAll):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordFull) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 		if p.matchKeyword(KeywordLeft) || p.matchKeyword(KeywordRight) || p.matchKeyword(KeywordInner) || p.matchKeyword(KeywordOuter) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordSemi), p.matchKeyword(KeywordAsof):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordLeft) || p.matchKeyword(KeywordRight) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 		if p.matchKeyword(KeywordOuter) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordInner):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordAll) || p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAsof) || p.matchKeyword(KeywordArray) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordLeft):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordOuter) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 		if p.matchKeyword(KeywordSemi) || p.matchKeyword(KeywordAnti) ||
 			p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAll) ||
 			p.matchKeyword(KeywordAsof) || p.matchKeyword(KeywordArray) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordRight):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordOuter) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 		if p.matchKeyword(KeywordSemi) || p.matchKeyword(KeywordAnti) ||
 			p.matchKeyword(KeywordAny) || p.matchKeyword(KeywordAll) ||
 			p.matchKeyword(KeywordAsof) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordFull):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 		if p.matchKeyword(KeywordOuter) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 		if p.matchKeyword(KeywordAll) || p.matchKeyword(KeywordAny) {
-			modifiers = append(modifiers, p.last().String)
+			modifiers = append(modifiers, p.current().String)
 			_ = p.lexer.consumeToken()
 		}
 	case p.matchKeyword(KeywordArray):
-		modifiers = append(modifiers, p.last().String)
+		modifiers = append(modifiers, p.current().String)
 		_ = p.lexer.consumeToken()
 	}
 	return modifiers
@@ -275,24 +276,79 @@ func (p *Parser) parseJoinTableExpr(_ Pos) (Expr, error) {
 			StatementEnd: statementEnd,
 		}, nil
 	default:
-		return nil, fmt.Errorf("expected table name or subquery, got %s", fmt.Sprintf("%v", p.lastTokenKind()))
+		return nil, fmt.Errorf("expected table name or subquery, got %s", fmt.Sprintf("%v", p.currentTokenKind()))
 	}
+}
+
+// parseJoinModifiers parses the modifiers that may precede JOIN: an optional
+// GLOBAL/LOCAL locality followed by the join type. When a consumed locality
+// turns out not to precede a join, it rewinds the lexer and returns nil,
+// leaving the keyword for the caller to reject.
+func (p *Parser) parseJoinModifiers(pos Pos) ([]string, error) {
+	if !p.matchOneOfKeywords(KeywordGlobal, KeywordLocal) {
+		return p.parseJoinType(pos), nil
+	}
+
+	savedState := p.lexer.saveState()
+	locality := p.current()
+	_ = p.lexer.consumeToken()
+
+	joinType := p.parseJoinType(p.Pos())
+	if len(joinType) == 0 && !p.matchKeyword(KeywordJoin) {
+		p.lexer.restoreState(savedState)
+		return nil, nil
+	}
+
+	// ARRAY JOIN reads a column list rather than a distributed table, so it has
+	// no locality. Modifiers keep their source spelling, hence EqualFold.
+	if slices.ContainsFunc(joinType, func(modifier string) bool {
+		return strings.EqualFold(modifier, KeywordArray)
+	}) {
+		// point at the locality, not at wherever the join op stopped
+		return nil, &ParseError{
+			Pos: locality.Pos,
+			Got: locality,
+			Msg: fmt.Sprintf("%s cannot be combined with ARRAY JOIN", locality.String),
+		}
+	}
+
+	return append([]string{locality.String}, joinType...), nil
+}
+
+// peekJoinAfterLocality reports whether the current GLOBAL/LOCAL keyword is
+// followed by a join operator, leaving the lexer where it found it. Expression
+// parsing uses it to tell a locality apart from the GLOBAL IN operator.
+func (p *Parser) peekJoinAfterLocality() bool {
+	savedState := p.lexer.saveState()
+	defer p.lexer.restoreState(savedState)
+
+	modifiers, err := p.parseJoinModifiers(p.Pos())
+	if err != nil {
+		// A malformed locality join such as GLOBAL ARRAY JOIN still belongs
+		// to the FROM clause, which reports the error.
+		return true
+	}
+
+	return modifiers != nil && p.matchKeyword(KeywordJoin)
 }
 
 func (p *Parser) parseJoinRightExpr(pos Pos) (expr Expr, err error) {
 	var rightExpr Expr
 	var modifiers []string
 	switch {
-	case p.tryConsumeKeywords(KeywordGlobal):
-	case p.tryConsumeKeywords(KeywordLocal):
 	case p.tryConsumeTokenKind(TokenKindComma) != nil:
 		return p.parseJoinExpr(p.Pos())
 	default:
-		modifiers = p.parseJoinOp(p.Pos())
+		// GLOBAL/LOCAL only says how the right-hand table is distributed, so
+		// the join type still follows it: `GLOBAL LEFT JOIN` is a LEFT join.
+		modifiers, err = p.parseJoinModifiers(p.Pos())
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if len(modifiers) != 0 && !p.matchKeyword(KeywordJoin) {
-		return nil, fmt.Errorf("expected JOIN, got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected JOIN, got %s", p.currentTokenKind())
 	}
 	if !p.tryConsumeKeywords(KeywordJoin) {
 		return nil, nil
@@ -399,7 +455,9 @@ func (p *Parser) parseTableExpr(pos Pos) (*TableExpr, error) {
 
 	tableEnd := expr.End()
 	if p.tryConsumeKeywords(KeywordAs) {
-		alias, err := p.parseIdent()
+		// After AS the token can only be an alias name, so even reserved
+		// keywords are accepted (e.g. `FROM t AS from`).
+		alias, err := p.parseAnyKeyword()
 		if err != nil {
 			return nil, err
 		}
@@ -409,7 +467,7 @@ func (p *Parser) parseTableExpr(pos Pos) (*TableExpr, error) {
 			Alias:    alias,
 		}
 		tableEnd = expr.End()
-	} else if p.matchTokenKind(TokenKindIdent) && p.lastTokenKind() != TokenKindKeyword {
+	} else if p.matchTokenKind(TokenKindIdent) && p.currentTokenKind() != TokenKindKeyword {
 		alias, err := p.parseIdent()
 		if err != nil {
 			return nil, err
@@ -503,16 +561,20 @@ func (p *Parser) parseGroupByClause(pos Pos) (*GroupByClause, error) {
 
 	var expr Expr
 	var err error
+	var groupByEnd Pos
 	aggregateType := ""
 	switch {
 	case p.matchKeyword(KeywordCube) || p.matchKeyword(KeywordRollup):
-		aggregateType = p.last().String
+		aggregateType = p.current().String
 		_ = p.lexer.consumeToken()
 		expr, err = p.parseFunctionParams(p.Pos())
 	case p.tryConsumeKeywords(KeywordGrouping, KeywordSets):
 		aggregateType = "GROUPING SETS"
 		expr, err = p.parseFunctionParams(p.Pos())
-	case p.tryConsumeKeywords(KeywordAll):
+	case p.matchKeyword(KeywordAll):
+		// GROUP BY ALL has no expression list; the clause ends at ALL itself
+		groupByEnd = p.End()
+		_ = p.lexer.consumeToken()
 		aggregateType = "ALL"
 	default:
 		expr, err = p.parseColumnExprListWithLParen(p.Pos())
@@ -520,14 +582,21 @@ func (p *Parser) parseGroupByClause(pos Pos) (*GroupByClause, error) {
 	if err != nil {
 		return nil, err
 	}
+	if expr != nil {
+		groupByEnd = expr.End()
+	}
 	groupBy := &GroupByClause{
 		GroupByPos:    pos,
+		GroupByEnd:    groupByEnd,
 		AggregateType: aggregateType,
 		Expr:          expr,
 	}
 
 	// parse WITH CUBE, ROLLUP, TOTALS
 	for p.tryConsumeKeywords(KeywordWith) {
+		// the clause now extends to the CUBE/ROLLUP/TOTALS token; capture its
+		// end before it is consumed
+		keywordEnd := p.End()
 		switch {
 		case p.tryConsumeKeywords(KeywordCube):
 			groupBy.WithCube = true
@@ -536,10 +605,10 @@ func (p *Parser) parseGroupByClause(pos Pos) (*GroupByClause, error) {
 		case p.tryConsumeKeywords(KeywordTotals):
 			groupBy.WithTotals = true
 		default:
-			return nil, fmt.Errorf("expected CUBE, ROLLUP or TOTALS, got %s", p.lastTokenKind())
+			return nil, fmt.Errorf("expected CUBE, ROLLUP or TOTALS, got %s", p.currentTokenKind())
 		}
+		groupBy.GroupByEnd = keywordEnd
 	}
-	groupBy.GroupByEnd = p.Pos()
 
 	return groupBy, nil
 }
@@ -598,7 +667,7 @@ func (p *Parser) tryParseLimitByClause(pos Pos) (Expr, error) {
 	return p.parseLimitByClause(pos)
 }
 
-func (p *Parser) parseBetweenClause(expr Expr) (*BetweenClause, error) {
+func (p *Parser) parseBetweenClause(expr Expr, not bool) (*BetweenClause, error) {
 	if err := p.expectKeyword(KeywordBetween); err != nil {
 		return nil, err
 	}
@@ -620,6 +689,7 @@ func (p *Parser) parseBetweenClause(expr Expr) (*BetweenClause, error) {
 
 	return &BetweenClause{
 		Expr:    expr,
+		Not:     not,
 		Between: betweenExpr,
 		AndPos:  andPos,
 		And:     andExpr,
@@ -655,7 +725,7 @@ func (p *Parser) tryParseWindowFrameClause(pos Pos) (*WindowFrameClause, error) 
 func (p *Parser) parseWindowFrameClause(pos Pos) (*WindowFrameClause, error) {
 	var windowFrameType string
 	if p.matchKeyword(KeywordRows) || p.matchKeyword(KeywordRange) {
-		windowFrameType = p.last().String
+		windowFrameType = p.current().String
 		_ = p.lexer.consumeToken()
 	} else {
 		return nil, fmt.Errorf("expected ROWS or RANGE for window frame")
@@ -795,20 +865,20 @@ func (p *Parser) parseFrameInterval() (Expr, error) {
 func (p *Parser) parseFrameDirection() (string, error) {
 	switch {
 	case p.matchKeyword(KeywordPreceding), p.matchKeyword(KeywordFollowing):
-		direction := p.last().String
+		direction := p.current().String
 		_ = p.lexer.consumeToken()
 		return direction, nil
 	default:
-		return "", fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
+		return "", fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.currentTokenKind())
 	}
 }
 
 func (p *Parser) parseFrameDirectionWithEnd() (string, Pos, error) {
 	if !p.matchKeyword(KeywordPreceding) && !p.matchKeyword(KeywordFollowing) {
-		return "", 0, fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.lastTokenKind())
+		return "", 0, fmt.Errorf("expected PRECEDING or FOLLOWING, got %s", p.currentTokenKind())
 	}
 	endPos := p.End()
-	direction := p.last().String
+	direction := p.current().String
 	_ = p.lexer.consumeToken()
 	return direction, endPos, nil
 }
@@ -826,8 +896,10 @@ func (p *Parser) parseWindowCondition(pos Pos) (*WindowExpr, error) {
 	}
 	var windowName *Ident
 	if p.canParseWindowNameInParens() {
+		// canParseWindowNameInParens already disambiguated keyword tokens
+		// (e.g. `OVER (order)` vs `OVER (ORDER BY ...)`).
 		var err error
-		windowName, err = p.parseIdent()
+		windowName, err = p.parseAnyKeyword()
 		if err != nil {
 			return nil, err
 		}
@@ -859,7 +931,7 @@ func (p *Parser) parseWindowCondition(pos Pos) (*WindowExpr, error) {
 }
 
 func (p *Parser) canParseWindowNameInParens() bool {
-	if !p.matchTokenKind(TokenKindIdent) {
+	if !p.matchTokenKind(TokenKindIdent, TokenKindKeyword) {
 		return false
 	}
 	if !p.matchTokenKind(TokenKindKeyword) {
@@ -893,7 +965,9 @@ func (p *Parser) parseWindowClause(pos Pos) (*WindowClause, error) {
 
 	windows := make([]*WindowDefinition, 0, 1)
 	for {
-		windowName, err := p.parseIdent()
+		// After WINDOW (or a comma) the token can only be a window name, so
+		// even reserved keywords are accepted (e.g. `WINDOW order AS (...)`).
+		windowName, err := p.parseAnyKeyword()
 		if err != nil {
 			return nil, err
 		}
@@ -987,7 +1061,7 @@ func (p *Parser) consumeOptionalSetOpModifier() string {
 
 func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 	if !p.matchKeyword(KeywordSelect) && !p.matchKeyword(KeywordWith) && !p.matchTokenKind(TokenKindLParen) {
-		return nil, fmt.Errorf("expected SELECT, WITH or (, got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected SELECT, WITH or (, got %s", p.currentTokenKind())
 	}
 
 	hasParen := p.tryConsumeTokenKind(TokenKindLParen) != nil
@@ -995,31 +1069,8 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch {
-	case p.tryConsumeKeywords(KeywordUnion):
-		mode := UnionMode(p.consumeOptionalSetOpModifier())
-		next, err := p.parseSelectQuery(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		selectStmt.Union = next
-		selectStmt.UnionMode = mode
-	case p.tryConsumeKeywords(KeywordExcept):
-		mode := ExceptMode(p.consumeOptionalSetOpModifier())
-		next, err := p.parseSelectQuery(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		selectStmt.Except = next
-		selectStmt.ExceptMode = mode
-	case p.tryConsumeKeywords(KeywordIntersect):
-		mode := IntersectMode(p.consumeOptionalSetOpModifier())
-		next, err := p.parseSelectQuery(p.Pos())
-		if err != nil {
-			return nil, err
-		}
-		selectStmt.Intersect = next
-		selectStmt.IntersectMode = mode
+	if err := p.parseSetOperation(selectStmt); err != nil {
+		return nil, err
 	}
 	if hasParen {
 		if err := p.expectTokenKind(TokenKindRParen); err != nil {
@@ -1035,6 +1086,40 @@ func (p *Parser) parseSelectQuery(_ Pos) (*SelectQuery, error) {
 		}
 	}
 	return selectStmt, nil
+}
+
+// parseSetOperation binds a trailing UNION|EXCEPT|INTERSECT to selectStmt.
+// The right operand consumes the rest of the chain by recursing into
+// parseSelectQuery, so at most one operator is bound per call.
+func (p *Parser) parseSetOperation(selectStmt *SelectQuery) error {
+	switch {
+	case p.tryConsumeKeywords(KeywordUnion):
+		mode := UnionMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
+		if err != nil {
+			return err
+		}
+		selectStmt.Union = next
+		selectStmt.UnionMode = mode
+	case p.tryConsumeKeywords(KeywordExcept):
+		mode := ExceptMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
+		if err != nil {
+			return err
+		}
+		selectStmt.Except = next
+		selectStmt.ExceptMode = mode
+	case p.tryConsumeKeywords(KeywordIntersect):
+		mode := IntersectMode(p.consumeOptionalSetOpModifier())
+		next, err := p.parseSelectQuery(p.Pos())
+		if err != nil {
+			return err
+		}
+		selectStmt.Intersect = next
+		selectStmt.IntersectMode = mode
+	}
+
+	return nil
 }
 
 func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: funlen
@@ -1095,13 +1180,15 @@ func (p *Parser) parseSelectStmt(pos Pos) (*SelectQuery, error) { // nolint: fun
 		statementEnd = groupBy.End()
 	}
 	withTotal := false
-	lastPos := p.Pos()
 	if p.tryConsumeKeywords(KeywordWith) {
+		// the statement now ends at the TOTALS token; capture its end before
+		// expectKeyword consumes it
+		totalsEnd := p.End()
 		if err := p.expectKeyword(KeywordTotals); err != nil {
 			return nil, err
 		}
 		withTotal = true
-		statementEnd = lastPos
+		statementEnd = totalsEnd
 	}
 	having, err := p.tryParseHavingClause(p.Pos())
 	if err != nil {
@@ -1212,12 +1299,9 @@ func (p *Parser) parseCTEStmt(pos Pos) (*CTEStmt, error) {
 	if err := p.expectKeyword(KeywordAs); err != nil {
 		return nil, err
 	}
-	if p.matchTokenKind(TokenKindLParen) {
-		// Consume the wrapping parens at this layer (mirrors parseSubQuery),
-		// so the inner SelectQuery.HasParen stays false — the CTE wrapper
-		// owns the parens, not the SELECT itself. Keeps every CTE-body's
-		// format/beautify golden byte-identical post-change.
-		_ = p.lexer.consumeToken()
+	// The CTE wrapper owns the parens, so the inner SelectQuery.HasParen
+	// stays false (mirrors parseSubQuery).
+	if p.tryConsumeTokenKind(TokenKindLParen) != nil {
 		selectQuery, err := p.parseSelectQuery(p.Pos())
 		if err != nil {
 			return nil, err
@@ -1231,7 +1315,8 @@ func (p *Parser) parseCTEStmt(pos Pos) (*CTEStmt, error) {
 			Alias:  selectQuery,
 		}, nil
 	}
-	name, err := p.parseIdent()
+	// after AS the token can only be an alias name, reserved keyword or not
+	name, err := p.parseAnyKeyword()
 	if err != nil {
 		return nil, err
 	}
@@ -1286,10 +1371,10 @@ func (p *Parser) parseExplainStmt(pos Pos) (*ExplainStmt, error) {
 		p.matchKeyword(KeywordPipeline),
 		p.matchKeyword(KeywordEstimate),
 		p.matchKeyword(KeywordAst):
-		explainType = p.last().String
+		explainType = p.current().String
 		_ = p.lexer.consumeToken()
 	default:
-		return nil, fmt.Errorf("expected SYNTAX, PIPELINE, ESTIMATE or AST, got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected SYNTAX, PIPELINE, ESTIMATE or AST, got %s", p.currentTokenKind())
 	}
 	stmt, err := p.parseSelectQuery(p.Pos())
 	if err != nil {

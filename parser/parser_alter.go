@@ -35,8 +35,11 @@ func (p *Parser) parseAlterTable(pos Pos) (*AlterTable, error) {
 		case p.matchKeyword(KeywordAttach):
 			alter, err = p.parseAlterTableAttachPartition(p.Pos())
 		case p.matchKeyword(KeywordDetach):
+			// like the sibling branches, the clause position is the keyword
+			// itself, so capture it before consuming DETACH
+			detachPos := p.Pos()
 			_ = p.lexer.consumeToken()
-			alter, err = p.parseAlterTableDetachPartition(p.Pos())
+			alter, err = p.parseAlterTableDetachPartition(detachPos)
 		case p.matchKeyword(KeywordFreeze):
 			alter, err = p.parseAlterTableFreezePartition(p.Pos())
 		case p.matchKeyword(KeywordRemove):
@@ -166,9 +169,9 @@ func (p *Parser) parseAlterTableAddIndex(pos Pos) (*AlterTableAddIndex, error) {
 	}, nil
 }
 
-func (p *Parser) parseProjectionOrderBy(pos Pos) (*ProjectionOrderByClause, error) {
-	if err := p.expectKeyword(KeywordOrder); err != nil {
-		return nil, err
+func (p *Parser) tryParseProjectionOrderBy(pos Pos) (*ProjectionOrderByClause, error) {
+	if !p.tryConsumeKeywords(KeywordOrder) {
+		return nil, nil // nolint
 	}
 	if err := p.expectKeyword(KeywordBy); err != nil {
 		return nil, err
@@ -202,18 +205,18 @@ func (p *Parser) parseProjectionSelect(pos Pos) (*ProjectionSelectStmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	orderBy, err := p.parseProjectionOrderBy(p.Pos())
+	orderBy, err := p.tryParseProjectionOrderBy(p.Pos())
 	if err != nil {
 		return nil, err
 	}
 
-	lastToken := p.last()
+	curToken := p.current()
 	if err := p.expectTokenKind(TokenKindRParen); err != nil {
 		return nil, err
 	}
 	return &ProjectionSelectStmt{
 		LeftParenPos:  pos,
-		RightParenPos: lastToken.Pos,
+		RightParenPos: curToken.Pos,
 		With:          with,
 		SelectColumns: columns,
 		GroupBy:       groupBy,
@@ -417,7 +420,7 @@ func (p *Parser) parseAlterTableDropClause(pos Pos) (AlterTableClause, error) {
 	case p.matchKeyword(KeywordProjection):
 		kind = KeywordProjection
 	default:
-		return nil, fmt.Errorf("expected token: COLUMN|INDEX|PROJECTION, but got %s", p.lastTokenKind())
+		return nil, fmt.Errorf("expected token: COLUMN|INDEX|PROJECTION, but got %s", p.currentTokenKind())
 	}
 	_ = p.lexer.consumeToken()
 
@@ -546,7 +549,7 @@ func (p *Parser) parseAlterTableClearClause(pos Pos) (AlterTableClause, error) {
 	case p.matchKeyword(KeywordProjection):
 		kind = KeywordProjection
 	default:
-		return nil, fmt.Errorf("expected keyword: COLUMN|INDEX|PROJECTION, but got %q", p.lastTokenKind())
+		return nil, fmt.Errorf("expected keyword: COLUMN|INDEX|PROJECTION, but got %q", p.currentTokenKind())
 	}
 	_ = p.lexer.consumeToken()
 
@@ -676,6 +679,20 @@ func (p *Parser) parseAlterTableModify(pos Pos) (AlterTableClause, error) {
 			StatementEnd: selectQuery.End(),
 			SelectExpr:   selectQuery,
 		}, nil
+	case p.matchKeyword(KeywordOrder):
+		_ = p.lexer.consumeToken() // consume "ORDER"
+		if err := p.expectKeyword(KeywordBy); err != nil {
+			return nil, err
+		}
+		orderBy, err := p.parseExpr(p.Pos())
+		if err != nil {
+			return nil, err
+		}
+		return &AlterTableModifyOrderBy{
+			ModifyPos:    pos,
+			StatementEnd: orderBy.End(),
+			OrderBy:      orderBy,
+		}, nil
 	case p.matchKeyword(KeywordSetting):
 		_ = p.lexer.consumeToken() // consume "SETTING"
 		settings, err := p.parseSettingsList(p.Pos())
@@ -690,8 +707,8 @@ func (p *Parser) parseAlterTableModify(pos Pos) (AlterTableClause, error) {
 			Settings:     settings,
 		}, nil
 	default:
-		return nil, fmt.Errorf("expected keyword: COLUMN|TTL|QUERY|SETTING, but got %q",
-			p.last().String)
+		return nil, fmt.Errorf("expected keyword: COLUMN|TTL|QUERY|ORDER|SETTING, but got %q",
+			p.currentTokenString())
 	}
 
 }
@@ -787,7 +804,7 @@ func (p *Parser) parseAlterTableMaterialize(pos Pos) (AlterTableClause, error) {
 	case p.matchKeyword(KeywordProjection):
 		kind = KeywordProjection
 	default:
-		return nil, fmt.Errorf("expected keyword: INDEX|PROJECTION, but got %q", p.lastTokenKind())
+		return nil, fmt.Errorf("expected keyword: INDEX|PROJECTION, but got %q", p.currentTokenKind())
 	}
 	_ = p.lexer.consumeToken()
 

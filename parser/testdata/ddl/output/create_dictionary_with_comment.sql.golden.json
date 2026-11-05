@@ -25,6 +25,7 @@
       "Attributes": [
         {
           "NamePos": 37,
+          "AttrEnd": 46,
           "Name": {
             "Name": "id",
             "QuoteType": 1,
@@ -47,6 +48,7 @@
         },
         {
           "NamePos": 52,
+          "AttrEnd": 73,
           "Name": {
             "Name": "name",
             "QuoteType": 1,
@@ -73,6 +75,7 @@
         },
         {
           "NamePos": 80,
+          "AttrEnd": 125,
           "Name": {
             "Name": "value",
             "QuoteType": 1,
@@ -123,6 +126,7 @@
         },
         {
           "NamePos": 132,
+          "AttrEnd": 161,
           "Name": {
             "Name": "parent_id",
             "QuoteType": 1,
@@ -145,6 +149,7 @@
         },
         {
           "NamePos": 167,
+          "AttrEnd": 192,
           "Name": {
             "Name": "is_active",
             "QuoteType": 1,
@@ -167,6 +172,7 @@
         },
         {
           "NamePos": 198,
+          "AttrEnd": 227,
           "Name": {
             "Name": "object_id",
             "QuoteType": 1,
@@ -233,7 +239,10 @@
               "LiteralPos": 269,
               "LiteralEnd": 278,
               "Literal": "localhost"
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           },
           {
             "ArgPos": 284,
@@ -248,7 +257,10 @@
               "NumEnd": 293,
               "Literal": "3306",
               "Base": 10
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           },
           {
             "ArgPos": 298,
@@ -262,7 +274,10 @@
               "LiteralPos": 304,
               "LiteralEnd": 311,
               "Literal": "default"
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           },
           {
             "ArgPos": 317,
@@ -276,7 +291,10 @@
               "LiteralPos": 327,
               "LiteralEnd": 327,
               "Literal": ""
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           },
           {
             "ArgPos": 333,
@@ -290,7 +308,10 @@
               "LiteralPos": 337,
               "LiteralEnd": 341,
               "Literal": "test"
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           },
           {
             "ArgPos": 347,
@@ -304,7 +325,10 @@
               "LiteralPos": 354,
               "LiteralEnd": 364,
               "Literal": "dict_table"
-            }
+            },
+            "Args": null,
+            "LParenPos": 0,
+            "RParenPos": 0
           }
         ],
         "RParenPos": 367

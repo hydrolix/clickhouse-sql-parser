@@ -75,6 +75,12 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.OuterSettings, fn) {
 			return false
 		}
+		if !Walk(n.Except, fn) {
+			return false
+		}
+		if !Walk(n.Intersect, fn) {
+			return false
+		}
 		if !Walk(n.Format, fn) {
 			return false
 		}
@@ -131,6 +137,8 @@ func Walk(node Expr, fn WalkFunc) bool {
 		// Leaf node
 	case *StringLiteral:
 		// Leaf node
+	case *BoolLiteral:
+		// Leaf node
 	case *NullLiteral:
 		// Leaf node
 	case *NotNullLiteral:
@@ -156,6 +164,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 			return false
 		}
 		if !Walk(n.Then, fn) {
+			return false
+		}
+		if !Walk(n.Else, fn) {
 			return false
 		}
 	case *CaseExpr:
@@ -327,6 +338,11 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Format, fn) {
 			return false
 		}
+		for _, value := range n.Values {
+			if !Walk(value, fn) {
+				return false
+			}
+		}
 		if !Walk(n.SelectExpr, fn) {
 			return false
 		}
@@ -440,6 +456,10 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Number, fn) {
 			return false
 		}
+	case *WindowFrameParam:
+		if !Walk(n.Param, fn) {
+			return false
+		}
 	case *TopClause:
 		if !Walk(n.Number, fn) {
 			return false
@@ -531,6 +551,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 			return false
 		}
 	case *SystemReloadExpr:
+		if !Walk(n.OnCluster, fn) {
+			return false
+		}
 		if !Walk(n.Dictionary, fn) {
 			return false
 		}
@@ -677,6 +700,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Settings, fn) {
 			return false
 		}
+		if !Walk(n.TableSchema, fn) {
+			return false
+		}
 		if !Walk(n.Engine, fn) {
 			return false
 		}
@@ -744,6 +770,25 @@ func Walk(node Expr, fn WalkFunc) bool {
 			return false
 		}
 		if !Walk(n.Expr, fn) {
+			return false
+		}
+	case *CreateNamedCollection:
+		if !Walk(n.Name, fn) {
+			return false
+		}
+		if !Walk(n.OnCluster, fn) {
+			return false
+		}
+		for _, param := range n.Params {
+			if !Walk(param, fn) {
+				return false
+			}
+		}
+	case *NamedCollectionParam:
+		if !Walk(n.Name, fn) {
+			return false
+		}
+		if !Walk(n.Value, fn) {
 			return false
 		}
 	case *CreateRole:
@@ -912,6 +957,10 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.SelectExpr, fn) {
 			return false
 		}
+	case *AlterTableModifyOrderBy:
+		if !Walk(n.OrderBy, fn) {
+			return false
+		}
 	case *AlterTableModifyTTL:
 		if !Walk(n.TTL, fn) {
 			return false
@@ -1026,12 +1075,18 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Comment, fn) {
 			return false
 		}
+		if !Walk(n.CompressionCodec, fn) {
+			return false
+		}
 	case *ScalarType:
 		if !Walk(n.Name, fn) {
 			return false
 		}
 	case *JSONType:
 		if !Walk(n.Name, fn) {
+			return false
+		}
+		if !walkJSONOptions(n.Options, fn) {
 			return false
 		}
 	case *PropertyType:
@@ -1138,6 +1193,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.ToDisk, fn) {
 			return false
 		}
+		if !Walk(n.Action, fn) {
+			return false
+		}
 	case *TTLPolicyRuleAction:
 		if !Walk(n.Codec, fn) {
 			return false
@@ -1221,6 +1279,9 @@ func Walk(node Expr, fn WalkFunc) bool {
 			}
 		}
 	case *WithTimeoutClause:
+		if !Walk(n.Expr, fn) {
+			return false
+		}
 		if !Walk(n.Number, fn) {
 			return false
 		}
@@ -1281,6 +1342,11 @@ func Walk(node Expr, fn WalkFunc) bool {
 		}
 		if !Walk(n.Value, fn) {
 			return false
+		}
+		for _, arg := range n.Args {
+			if !Walk(arg, fn) {
+				return false
+			}
 		}
 	case *DictionaryLifetimeClause:
 		if !Walk(n.Value, fn) {
@@ -1520,11 +1586,67 @@ func Walk(node Expr, fn WalkFunc) bool {
 		if !Walk(n.Target, fn) {
 			return false
 		}
+		if !Walk(n.Settings, fn) {
+			return false
+		}
 	case *DistinctOn:
 		for _, ident := range n.Idents {
 			if !Walk(ident, fn) {
 				return false
 			}
+		}
+	}
+	return true
+}
+
+func walkJSONOptions(options *JSONOptions, fn WalkFunc) bool {
+	if options == nil {
+		return true
+	}
+	for _, item := range options.Items {
+		if !walkJSONOption(item, fn) {
+			return false
+		}
+	}
+	return true
+}
+
+func walkJSONOption(option *JSONOption, fn WalkFunc) bool {
+	if option == nil {
+		return true
+	}
+	if !walkJSONPath(option.SkipPath, fn) {
+		return false
+	}
+	if !Walk(option.SkipRegex, fn) {
+		return false
+	}
+	if !Walk(option.MaxDynamicPaths, fn) {
+		return false
+	}
+	if !Walk(option.MaxDynamicTypes, fn) {
+		return false
+	}
+	return walkJSONTypeHint(option.Column, fn)
+}
+
+func walkJSONTypeHint(hint *JSONTypeHint, fn WalkFunc) bool {
+	if hint == nil {
+		return true
+	}
+	if !walkJSONPath(hint.Path, fn) {
+		return false
+	}
+	return Walk(hint.Type, fn)
+}
+
+func walkJSONPath(path *JSONPath, fn WalkFunc) bool {
+	if path == nil {
+		return true
+	}
+	for _, ident := range path.Idents {
+		if !Walk(ident, fn) {
+			return false
 		}
 	}
 	return true
