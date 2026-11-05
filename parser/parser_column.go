@@ -840,6 +840,15 @@ func (p *Parser) parseExceptExpr(_ Pos) (*FunctionExpr, error) {
 	if err != nil {
 		return nil, err
 	}
+	// STRICT is not a keyword; it is the optional mode of EXCEPT.
+	if p.current() != nil && p.current().Kind == TokenKindIdent && strings.EqualFold(p.current().String, "STRICT") {
+		strict := p.current()
+		if err := p.lexer.consumeToken(); err != nil {
+			return nil, err
+		}
+		name.Name += " STRICT"
+		name.NameEnd = strict.End
+	}
 	if p.matchTokenKind(TokenKindIdent) {
 		param, err := p.parseIdent()
 		if err != nil {
@@ -1216,6 +1225,18 @@ func (p *Parser) parseColumnsExpr(pos Pos) (*ColumnExpr, error) {
 	}, nil
 }
 
+// isStarLikeSelectExpr reports whether expr is `*` or `COLUMNS(...)`, the only
+// select items an EXCEPT column modifier can follow.
+func isStarLikeSelectExpr(expr Expr) bool {
+	switch e := expr.(type) {
+	case *Ident:
+		return e.Name == "*"
+	case *FunctionExpr:
+		return e.Name != nil && strings.EqualFold(e.Name.Name, "COLUMNS")
+	}
+	return false
+}
+
 func (p *Parser) parseSelectItem() (*SelectItem, error) {
 	expr, err := p.parseExpr(p.Pos())
 	if err != nil {
@@ -1223,8 +1244,9 @@ func (p *Parser) parseSelectItem() (*SelectItem, error) {
 	}
 
 	modifiers := make([]*FunctionExpr, 0)
+	starLike := isStarLikeSelectExpr(expr)
 	for {
-		if p.matchKeyword(KeywordExcept) && (p.peekTokenKind(TokenKindLParen) || p.peekTokenKind(TokenKindIdent)) {
+		if starLike && p.matchKeyword(KeywordExcept) {
 			modifier, err := p.parseExceptExpr(p.Pos())
 			if err != nil {
 				return nil, err
